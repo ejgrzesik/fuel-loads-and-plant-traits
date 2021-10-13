@@ -1,1 +1,194 @@
-testing testing testing
+#libraries
+options(show.signif.stars=FALSE)   
+library(jagsUI);library(rjags);library(coda);
+library(matrixStats); library(R2OpenBUGS)
+library(tidyr) ; library(dplyr); library(stringi)
+
+
+#####################################################################################
+#1: DETERMINE MEAN SLA VALUE FOR EACH ABOVE GROUND (UNDERSTORY AND CANOPY) PLANT TYPE
+#####################################################################################
+
+#Import SpecificLeafArea csv
+SpecLA = read.csv("SpecificLeafArea.csv")
+
+#Remove rows with plant part = stems
+#SpecLA$Plant.part[SpecLA$Plant.part %in% c("stems", "branches")] = FALSE
+
+#Remove rows with NA in the SLA column
+SpecLA = SpecLA[is.na(SpecLA$SLA.m2.kg) == FALSE,]
+
+#Create new data frame with average SLA for each plant type
+SLA = data.frame(levels(as.factor(SpecLA$PlantType)))
+colnames(SLA) = "PlantType"
+SLA$meanSLA = as.vector(tapply(SpecLA$SLA.m2.kg, SpecLA$PlantType, mean))
+
+#################################################################################################
+#2: IMPORT FUEL LOAD, RECALCULATE FUEL LOAD SEPARATELY FOR DECIDUOUS AND EVERGREEN TREE SEEDLINGS
+#################################################################################################
+
+#Import Total fuel load csv
+fuelload = read.csv("TotalFuelLoad_PlotLevel.csv", row.name = 1)
+
+#Separate fibric and mesic soil into a new dataframe
+os_fuelload = fuelload[fuelload$Layer %in% c("Fibric", "Mesic"),]
+
+#Remove rows with Fibric and Mesic fuel types from fuel load dataframe
+fuelload$Layer[fuelload$Layer %in% c("Fibric", "Mesic")] = FALSE
+fuelload = fuelload[is.na(fuelload$Layer) == FALSE,]
+
+#Recalculate fuel load for deciduous and evergreen tree seedlings (larlar included in evergreen seedlings)
+  #import shrub dataframe
+  shru = read.csv("ShrubSeedlingSaplingDensity2019Sites.csv", header = TRUE) ; head(shru) ; str(shru)
+  #Create column of median basal diameter for each diameter size class in shru data frame
+  shru$BasDiam = 0 
+  shru = shru[is.na(shru$SizeClass) == FALSE, ]
+  shru$BasDiam[shru$SizeClass == 1] = 0.5
+  shru$BasDiam[shru$SizeClass == 2] = 1.5
+  shru$BasDiam[shru$SizeClass == 3] = 2.5
+  shru$BasDiam[shru$SizeClass == 4] = 3.5
+  shru$BasDiam[shru$SizeClass == 5] = 4.5
+  shru$BasDiam[shru$SizeClass == 6] = 5.5
+  shru$BasDiam[shru$SizeClass == 7] = 6.5
+  shru$BasDiam[shru$SizeClass == 8] = 7.5
+  shru$BasDiam[shru$SizeClass == 9] = 8.5
+  shru$BasDiam[shru$SizeClass == 10] = 9.5
+  shru$BasDiam[shru$SizeClass == 11] = 10.5
+  shru$BasDiam[shru$SizeClass == 12] = 11.5
+  shru$BasDiam[shru$SizeClass == 13] = 12.5
+  shru$BasDiam[shru$SizeClass == 14] = 13.5
+  
+  #keep tree seedling rows only
+  shru = shru[shru$Species %in% c("BETNEO","LARLAR","PICEASP","PICGLA","PICMAR","POPBAL","POPTRE"),]
+  
+  #Create Biomass column and calculate biomass per species (g/shrub) using basal diameters and multiply by count of individuals of that species in that bas diam size class
+  levels(shru$Species)
+  shru$Biomass = 0
+  shru$Biomass[shru$Species == "BETNEO"] =  ((shru$BasDiam[shru$Species == "BETNEO"])^2.68)*26.29*(shru$Count[shru$Species == "BETNEO"])  #allometric eqn for birch tree from Alexander et al. 2012 for basal diam
+  shru$Biomass[shru$Species == "LARLAR"] = ((shru$BasDiam[shru$Species == "LARLAR"])^2.40)*37.29*(shru$Count[shru$Species == "LARLAR"]) # Using the eqn for black spruce from Alexander et al. 2012
+  shru$Biomass[shru$Species == "PICEASP"] = ((shru$BasDiam[shru$Species == "PICEASP"])^2.40)*37.29*(shru$Count[shru$Species == "PICEASP"]) # Using the eqn for black spruce from Alexander et al. 2012
+  shru$Biomass[shru$Species == "PICGLA"] = ((shru$BasDiam[shru$Species == "PICGLA"])^2.45)*53.74*(shru$Count[shru$Species == "PICGLA"]) # Using the eqn from Alexander et al 2012
+  shru$Biomass[shru$Species == "PICMAR"] = ((shru$BasDiam[shru$Species == "PICMAR"])^2.40)*37.29*(shru$Count[shru$Species == "PICMAR"]) # Using the eqn from Alexander et al. 2012
+  shru$Biomass[shru$Species == "POPBAL"] = ((shru$BasDiam[shru$Species == "POPBAL"])^2.44)*58.29*(shru$Count[shru$Species == "POPBAL"]) #eqn from Alexander et al. 2012
+  shru$Biomass[shru$Species == "POPTRE"] = ((shru$BasDiam[shru$Species == "POPTRE"])^2.49)*56.83*(shru$Count[shru$Species == "POPTRE"]) # eqn from Alexander et al. 2012
+  
+  #create layer column
+  shru$Layer[shru$Species %in% c("BETNEO", "POPBAL", "POPTRE")] = "DecSeedling"
+  shru$Layer[shru$Species %in% c( "LARLAR", "PICEASP", "PICGLA", "PICMAR")] = "EverSeedling"
+
+  #Sum decseedlings fuel load for each site
+  dseed = data.frame(as.vector(tapply(shru$Biomass[shru$Layer == "DecSeedling"], shru$Site[shru$Layer == "DecSeedling"], FUN = sum, na.rm = TRUE)))
+  colnames(dseed) = "FuelLoad"
+  dseed$FuelLoad = dseed$FuelLoad/220/10000
+  dseed$Site = levels(as.factor(shru$Site)) ; dseed$Site = as.factor(dseed$Site)
+  dseed$Transect = NA ; dseed$Plot = NA
+  dseed$Layer = "DecSeedling" ; dseed$Layer = as.factor(dseed$Layer)
+  dseed$FuelLoad[is.na(dseed$FuelLoad) == TRUE] = 0#set any NAs in the FuelLoad column to zero
+
+  #Sum everseedling fuel load for each site
+  eseed = data.frame(as.vector(tapply(shru$Biomass[shru$Layer == "EverSeedling"], shru$Site[shru$Layer == "EverSeedling"], FUN = sum, na.rm = TRUE)))
+  colnames(eseed) = "FuelLoad"
+  eseed$FuelLoad = eseed$FuelLoad/220/10000
+  eseed$Site = levels(as.factor(shru$Site)) ; eseed$Site = as.factor(eseed$Site)
+  eseed$Transect = NA ; eseed$Plot = NA
+  eseed$Layer = "EverSeedling" ; eseed$Layer = as.factor(eseed$Layer)
+
+  #Add FuelLoad.g.m2 and FuelLoad.kg.m2 columns to dseed and eseed
+  dseed$FuelLoad.g.m2 = dseed$FuelLoad*10000
+  dseed$FuelLoad.kg.m2 = dseed$FuelLoad*10000/1000
+  eseed$FuelLoad.g.m2 = eseed$FuelLoad*10000
+  eseed$FuelLoad.kg.m2 = eseed$FuelLoad*10000/1000
+    
+#### Add dseed and eseed rows to fuel load dataframe ####
+str(fuelload)
+fuelload = rbind(fuelload, dseed, eseed)
+  
+######################################################################
+#3: DETERMINE FLAMMABILITY INDEX FOR EACH ABOVE GROUND PLANT TYPE
+######################################################################
+
+#Make new column in SLA dataframe called layer (Same as PlantType)
+SLA$Layer = SLA$PlantType
+str(SLA)
+
+#Add DecSeedling and EverSeedling to SLA dataframe as the same as Dec Tree and Ever Tree
+PlantType = c('DecSeedling','EverSeedling')
+meanSLA = c(17.950000,6.097273)
+Layer = PlantType
+seedSLA = data.frame(PlantType, meanSLA, Layer)#merging the vectors into a dataframe
+
+#Add seedSLA rows to SLA dataframe
+SLA = rbind(SLA, seedSLA)
+
+#Create new column to import SLA values into fuelload dataframe
+fuelload$meanSLA = NA
+for(thislayer in unique(SLA$Layer)) {
+  fuelload$meanSLA[fuelload$Layer == thislayer] = SLA$meanSLA[SLA$Layer == thislayer]
+}
+
+#Create flammability index column
+fuelload$FI = NA
+
+#Multiply fuelload by the meanSLA for that plant type
+fuelload$FI = fuelload$FuelLoad.kg.m2*fuelload$meanSLA
+
+#Create a primary key with Site and Layer in fuelload dataframe
+fuelload$primkey = as.factor(paste(fuelload$Site, fuelload$Layer, sep = "."))
+
+#Create new dataframe with mean FI for each plant type in each site
+flam_bytype = data.frame(as.vector(levels(fuelload$primkey)))
+colnames(flam_bytype) = "primkey"
+flam_bytype$FI = as.vector(tapply(fuelload$FI, fuelload$primkey, mean))
+flam_bytype = flam_bytype %>% separate(primkey, into = c("Site","Layer"), sep = '\\.')
+flam_bytype$Site = as.factor(flam_bytype$Site); flam_bytype$Layer = as.factor(flam_bytype$Layer)
+
+#Find mean canopy FI for sites represntative of WCM2 and WCM3
+flam_bytype$FI[flam_bytype$Site == "WCM2" & flam_bytype$Layer == "DeciduousTree"] = flam_bytype$FI[flam_bytype$Site == "GRM3" & flam_bytype$Layer == "DeciduousTree"]
+flam_bytype$FI[flam_bytype$Site == "WCM2" & flam_bytype$Layer == "EvergreenTree"] = flam_bytype$FI[flam_bytype$Site == "GRM3" & flam_bytype$Layer == "EvergreenTree"]
+flam_bytype$FI[flam_bytype$Site == "WCM3" & flam_bytype$Layer == "DeciduousTree"] = mean(flam_bytype$FI[flam_bytype$Site %in% c("GSM1","BCEFM2","GSM3") & flam_bytype$Layer == "DeciduousTree"])
+flam_bytype$FI[flam_bytype$Site == "WCM3" & flam_bytype$Layer == "EvergreenTree"] = mean(flam_bytype$FI[flam_bytype$Site %in% c("GSM1","BCEFM2","GSM3") & flam_bytype$Layer == "EvergreenTree"])
+
+#Remove NA rows
+flam_bytype = flam_bytype[is.na(flam_bytype$FI) == FALSE,]
+
+#Create new dataframe with average FI for each plant type across all sites
+avgflam_bytype = data.frame(as.vector(levels(flam_bytype$Layer)))
+colnames(avgflam_bytype) = "Layer"
+avgflam_bytype$FI = as.vector(tapply(flam_bytype$FI, flam_bytype$Layer, mean))
+avgflam_bytype$sd = as.vector(tapply(flam_bytype$FI, flam_bytype$Layer, sd))
+avgflam_bytype$n = 28
+avgflam_bytype$SE = avgflam_bytype$sd / sqrt(avgflam_bytype$n)
+avgflam_bytype = avgflam_bytype[is.na(avgflam_bytype$FI) == FALSE,]
+avgflam_bytype$FI.SE = paste(round(avgflam_bytype$FI, 2), paste0("(", round(avgflam_bytype$SE, 2), ")"), sep = "  ")
+
+#write.csv(avgflam_bytype, "FlammabilityIndex_bytype.csv")
+
+#Create new dataframe with summed FI for each site
+flam_bysite = data.frame(levels(flam_bytype$Site))
+colnames(flam_bysite) = "Site"
+flam_bysite$FI = as.vector(tapply(flam_bytype$FI, flam_bytype$Site, sum))
+
+#write.csv(flam_bysite, "FlammabilityIndex_bysite.csv")
+
+##############################################################
+#4: DETERMINE BURN SEVERITY POTENTIAL INDEX FOR EACH SITE
+##############################################################
+
+#Create primkey in os_fuelload dataframe
+os_fuelload$primkey = as.factor(paste(os_fuelload$Site, os_fuelload$Layer, sep = "."))
+
+#Find the average fibric and mesic fuel load for each site
+os_siteavg = data.frame(as.vector(tapply(os_fuelload$FuelLoad.kg.m2, os_fuelload$primkey, mean, na.rm = TRUE)))
+colnames(os_siteavg) = "FuelLoad.kg.m2"
+os_siteavg$primkey = as.factor(levels(os_fuelload$primkey))
+os_siteavg = os_siteavg %>% separate(primkey, into = c("Site", "Layer"), sep = '\\.')
+
+#Find the sum of fibric and mesic for each site
+os_sitesum = data.frame(as.vector(tapply(os_siteavg$FuelLoad.kg.m2, os_siteavg$Site, sum, na.rm = TRUE)))
+colnames(os_sitesum) = "FuelLoad.kg.m2"
+os_sitesum$Site = as.factor(levels(os_fuelload$Site))
+
+#Divide the flammability index for each site by the os fuel load sum to determine BSPI
+bspi = flam_bysite
+bspi$OSFuelLoad = os_sitesum$FuelLoad.kg.m2
+bspi$BSPI = bspi$FI / bspi$OSFuelLoad
