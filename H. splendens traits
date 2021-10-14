@@ -6,3 +6,144 @@ library(dplyr)
 library(reshape2)
 library(ggsci)
 
+options(show.signif.stars=FALSE)   
+library(jagsUI);library(rjags);library(coda);
+library(matrixStats); library(R2OpenBUGS)
+library(tidyr) ; library(dplyr); library(stringi)
+
+#####################################################################
+#1: CALCULATE H. SPLENDENS TRAIT CV FROM BIOMASS WEIGHTED TRAIT MEANS
+#####################################################################
+#import data
+hs_trait = read.csv("HylocomiumSplendens_TraitData_2019.csv", row.names = 1)
+fuelload = read.csv("TotalFuelLoad_PlotLevel.csv", row.names = 1)
+fuelload$Site = as.factor(fuelload$Site) ; fuelload$Layer = as.factor(fuelload$Layer)
+
+#format hs_trait
+##Calculate avg MC, sum length, avg width, new asprat (dead and live sla will stay the same)
+hs_trait$avgMC = (hs_trait$LiveMoistCont + hs_trait$DeadMoistCont) / 2
+hs_trait$sumL = (hs_trait$LiveLength + hs_trait$DeadLength)
+hs_trait$avgW = (hs_trait$LiveWidth + hs_trait$DeadWidth) / 2
+hs_trait$newAR = (hs_trait$avgW/hs_trait$sumL)
+##Make outlier values = NA
+hs_trait$avgMC[hs_trait$avgMC > 1000] = NA
+hs_trait$LiveSLA[hs_trait$LiveSLA > 1000] = NA
+hs_trait$DeadSLA[hs_trait$DeadSLA > 1000] = NA
+hs_trait$newAR[hs_trait$newAR > 0.5] = NA
+##remove unwanted columns
+hs_trait = hs_trait[, -c(4:7,9:12)]
+
+#format fuelload
+##subset feather moss biomass
+featbiom = data.frame(levels(as.factor(fuelload$Site)))
+colnames(featbiom) = "Site" ; featbiom$Site = as.factor(featbiom$Site)
+featbiom$biomass = as.vector(tapply(fuelload$FuelLoad[fuelload$Layer == "FeatherMoss"], fuelload$Site[fuelload$Layer == "FeatherMoss"], mean))
+str(featbiom)
+##Make the fuel load of GSM3 = mean of BCEFM2, GSM1, WCM3
+featbiom$biomass[featbiom$Site %in% c("GSM3")] = mean(featbiom$biomass[featbiom$Site %in% c("BCEFM2", "GSM1", "WCM3")])
+##Remove sites BFY10, BFY7, BFY8, DCY2, DCY3, DCY9 because there are no Hspl samples from these Sites
+featbiom$biomass[featbiom$Site %in% c("BFY10","BFY7", "BFY8","DCY2","DCY3","DCY9")] = NA
+featbiom = featbiom[is.na(featbiom$biomass) == FALSE,]
+
+#Create new dataframe with trait avgs for each cushion
+##first create primary key
+hs_trait$primkey = as.factor(paste(hs_trait$Site, hs_trait$CushionNumb, sep = "."))
+hs_cushavg = data.frame(levels(as.factor(hs_trait$primkey)))
+colnames(hs_cushavg) = "primkey"
+hs_cushavg = hs_cushavg %>% separate(primkey, into = c("Site", "CushionNumb"), sep = '\\.')
+##create for loop to insert biomass values for each site
+hs_cushavg$fm_biom = NA
+for(thissite in unique(hs_cushavg$Site)) {
+  hs_cushavg$fm_biom[hs_cushavg$Site == thissite] = featbiom$biomass[featbiom$Site == thissite]
+}
+##recreate primkey and multiply trait mean by biomass mean
+hs_cushavg$primkey = as.factor(paste(hs_cushavg$Site, hs_cushavg$CushionNumb, sep = "."))
+hs_cushavg$MoistCont = as.vector((tapply(hs_trait$avgMC, hs_trait$primkey, mean, na.rm = TRUE))*hs_cushavg$fm_biom)
+hs_cushavg$Length = as.vector((tapply(hs_trait$sumL, hs_trait$primkey, mean, na.rm = TRUE))*hs_cushavg$fm_biom)
+hs_cushavg$Width = as.vector((tapply(hs_trait$avgW, hs_trait$primkey, mean, na.rm = TRUE))*hs_cushavg$fm_biom)
+hs_cushavg$AspRat = as.vector((tapply(hs_trait$newAR, hs_trait$primkey, mean, na.rm = TRUE))*hs_cushavg$fm_biom)
+hs_cushavg$LiveSLA = as.vector((tapply(hs_trait$LiveSLA, hs_trait$primkey, mean, na.rm = TRUE))*hs_cushavg$fm_biom)
+hs_cushavg$DeadSLA = as.vector((tapply(hs_trait$DeadSLA, hs_trait$primkey, mean, na.rm = TRUE))*hs_cushavg$fm_biom)
+
+#Calculate trait CV for each site
+hs_cv = data.frame(levels(as.factor(hs_cushavg$Site))); colnames(hs_cv) = "Site"
+hs_cv$MoistCont.cv = as.vector(tapply(hs_cushavg$MoistCont, hs_cushavg$Site, sd, na.rm = TRUE)/tapply(hs_cushavg$MoistCont, hs_cushavg$Site, mean,na.rm = TRUE)*100)
+hs_cv$Length.cv = as.vector(tapply(hs_cushavg$Length, hs_cushavg$Site, sd,na.rm = TRUE)/tapply(hs_cushavg$Length, hs_cushavg$Site, mean,na.rm = TRUE)*100)
+hs_cv$Width.cv = as.vector(tapply(hs_cushavg$Width, hs_cushavg$Site, sd,na.rm = TRUE)/tapply(hs_cushavg$Width, hs_cushavg$Site, mean,na.rm = TRUE)*100)
+hs_cv$AspRat.cv = as.vector(tapply(hs_cushavg$AspRat, hs_cushavg$Site, sd,na.rm = TRUE)/tapply(hs_cushavg$AspRat, hs_cushavg$Site, mean,na.rm = TRUE)*100)
+hs_cv$LiveSLA.cv = as.vector(tapply(hs_cushavg$LiveSLA, hs_cushavg$Site, sd,na.rm = TRUE)/tapply(hs_cushavg$LiveSLA, hs_cushavg$Site, mean,na.rm = TRUE)*100)
+hs_cv$DeadSLA.cv = as.vector(tapply(hs_cushavg$DeadSLA, hs_cushavg$Site, sd,na.rm = TRUE)/tapply(hs_cushavg$DeadSLA, hs_cushavg$Site, mean,na.rm = TRUE)*100)
+##Calculate sum of trait CVs for each site
+hs_cv$Sum.cv = rowSums(hs_cv[,2:7])
+
+
+
+######################################################################
+#2: CALCULATE V. ULIGINOSUM TRAIT CV FROM BIOMASS WEIGHTED TRAIT MEANS
+######################################################################
+#import data
+vu_trait = read.csv("VacciniumUliginosum_TraitData_2019.csv")
+vu_trait$Site = as.factor(vu_trait$Site) ; vu_trait$SampleNumb = as.factor(vu_trait$SampleNumb)
+vu_trait = vu_trait[,-15]
+
+#format vu_trait
+##Calculate Moisture content for each plant part
+vu_trait$LiveWoodMoistCont = (vu_trait$LiveWoodWet - vu_trait$LiveWoodDry)/vu_trait$LiveWoodDry*100
+vu_trait$DeadWoodMoistCont = (vu_trait$DeadWoodWet - vu_trait$DeadWoodDry)/vu_trait$DeadWoodDry*100
+vu_trait$NewGrowthMoistCont = (vu_trait$NewGrowthWet - vu_trait$NewGrowthDry)/vu_trait$NewGrowthDry*100
+vu_trait$LiveLeavesMoistCont = (vu_trait$LiveLeavesWet - vu_trait$LiveLeavesDry)/vu_trait$LiveLeavesDry*100
+##make outlier values = NA
+vu_trait$LiveWoodMoistCont[vu_trait$LiveWoodMoistCont > 1000] = NA
+vu_trait$DeadWoodMoistCont[vu_trait$DeadWoodMoistCont > 200] = NA
+vu_trait$NewGrowthMoistCont[vu_trait$NewGrowthMoistCont > 150] = NA
+vu_trait$LiveLeavesDry[vu_trait$LiveLeavesDry > 4] = NA
+##Create columns and calculate Ratios
+vu_trait$LWDtoDWD = vu_trait$LiveWoodDry / vu_trait$DeadWoodDry
+vu_trait$LWDtoLLD = vu_trait$LiveWoodDry / vu_trait$LiveLeavesDry
+vu_trait$NGDtoDWD = vu_trait$NewGrowthDry/ vu_trait$DeadWoodDry
+vu_trait$NGDtoLLD = vu_trait$NewGrowthDry / vu_trait$LiveLeavesDry
+
+#subset deciduous shrub biomass
+decbiom = data.frame(levels(as.factor(fuelload$Site))) ; colnames(decbiom) = "Site" ; decbiom$Site = as.factor(decbiom$Site)
+decbiom$biomass = as.vector(tapply(fuelload$FuelLoad[fuelload$Layer == "DeciduousLeaf"], fuelload$Site[fuelload$Layer == "DeciduousLeaf"], mean))
+str(decbiom)
+##remove sites without vac uli data (DCY3, DCY9, MDI4)
+decbiom = decbiom[-c(9,11,23),]
+
+#Calculate biomass weighted traits
+##Add shrub biomass to vu_trait
+vu_trait$biomass = NA
+for(thissite in unique(vu_trait$Site)) {
+  vu_trait$biomass[vu_trait$Site == thissite] = decbiom$biomass[decbiom$Site == thissite]
+}
+##multiply trait values by biomass
+vu_trait$RhizomeD = as.vector(vu_trait$RhizomeDepth * vu_trait$biomass)
+vu_trait$RhizomeN = as.vector(vu_trait$RhizomeNumb * vu_trait$biomass)
+vu_trait$PlantH = as.vector(vu_trait$PlantHeight * vu_trait$biomass)
+vu_trait$DryLeafMass = as.vector(vu_trait$LiveLeavesDry * vu_trait$biomass)
+vu_trait$LiveWoodMC = as.vector(vu_trait$LiveWoodMoistCont * vu_trait$biomass)
+vu_trait$DeadWoodMC = as.vector(vu_trait$DeadWoodMoistCont * vu_trait$biomass)
+vu_trait$NewGrowthMC = as.vector(vu_trait$NewGrowthMoistCont * vu_trait$biomass)
+vu_trait$LeavesMC = as.vector(vu_trait$LiveLeavesMoistCont * vu_trait$biomass)
+vu_trait$LWtoDW = as.vector(vu_trait$LWDtoDWD * vu_trait$biomass)
+vu_trait$LWtoLL = as.vector(vu_trait$LWDtoLLD * vu_trait$biomass)
+vu_trait$NGtoDW = as.vector(vu_trait$NGDtoDWD * vu_trait$biomass)
+vu_trait$NGtoLL = as.vector(vu_trait$NGDtoLLD * vu_trait$biomass)
+
+#Calculate trait cv for each site
+vu_cv = data.frame(levels(as.factor(vu_trait$Site))) ; colnames(vu_cv) = "Site" ; vu_cv$Site = as.factor(vu_cv$Site)
+vu_cv$RhizomeDepth.cv = as.vector(tapply(vu_trait$RhizomeD, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$RhizomeD, vu_trait$Site, mean,na.rm = TRUE)*100)
+vu_cv$RhizomeNumb.cv = as.vector(tapply(vu_trait$RhizomeN, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$RhizomeN, vu_trait$Site, mean,na.rm = TRUE)*100)
+vu_cv$PlantHeight.cv = as.vector(tapply(vu_trait$PlantH, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$PlantH, vu_trait$Site, mean,na.rm = TRUE)*100)
+vu_cv$DryLeafMass.cv = as.vector(tapply(vu_trait$DryLeafMass, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$DryLeafMass, vu_trait$Site, mean,na.rm = TRUE)*100)
+vu_cv$LiveWoodMC.cv = as.vector(tapply(vu_trait$LiveWoodMC, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$LiveWoodMC, vu_trait$Site, mean,na.rm = TRUE)*100)
+vu_cv$DeadWoodMC.cv = as.vector(tapply(vu_trait$DeadWoodMC, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$DeadWoodMC, vu_trait$Site, mean,na.rm = TRUE)*100)
+vu_cv$NewGrowthMC.cv = as.vector(tapply(vu_trait$NewGrowthMC, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$NewGrowthMC, vu_trait$Site, mean,na.rm = TRUE)*100)
+vu_cv$LeafMC.cv = as.vector(tapply(vu_trait$LeavesMC, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$LeavesMC, vu_trait$Site, mean,na.rm = TRUE)*100)
+vu_cv$LWtoDW.cv = as.vector(tapply(vu_trait$LWtoDW, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$LWtoDW, vu_trait$Site, mean,na.rm = TRUE)*100)
+vu_cv$LWtoLL.cv = as.vector(tapply(vu_trait$LWtoLL, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$LWtoLL, vu_trait$Site, mean,na.rm = TRUE)*100)
+vu_cv$NGtoLL.cv = as.vector(tapply(vu_trait$NGtoLL, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$NGtoLL, vu_trait$Site, mean,na.rm = TRUE)*100)
+vu_cv$NGtoDW.cv = as.vector(tapply(vu_trait$NGtoDW, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$NGtoDW, vu_trait$Site, mean,na.rm = TRUE)*100)
+##****Creating six sites with NA values due to value of 0 for decid leaf biomass??***
+##Calculate sum of trait cv for each site
+vu_cv$Sum.cv = rowSums(vu_cv[,2:13])
