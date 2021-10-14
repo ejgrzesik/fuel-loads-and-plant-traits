@@ -1,0 +1,90 @@
+library(tidyr) ; library(dplyr); library(stringi)
+require(car)
+require(lme4); library(AICcmodavg)
+
+############################################
+#1: DEVELOP LMER MODELS TO PREDICT FUEL LOAD
+############################################
+
+#import data
+totalfuelload = read.csv("TotalFuelLoad_PlotLevel.csv", row.names = 1)
+envi = read.csv("Compiled2019SiteDataEnvironmental.csv", header = TRUE, row.names = 1)
+
+#format totalfuelload
+##Create column plot.new with plots labelled 1-6 (rather 1-3 by transect)
+totalfuelload$plot.new = NA
+totalfuelload$plot.new[totalfuelload$Transect == "A" & totalfuelload$Plot == 1] = 1
+totalfuelload$plot.new[totalfuelload$Transect == "A" & totalfuelload$Plot == 2] = 2
+totalfuelload$plot.new[totalfuelload$Transect == "A" & totalfuelload$Plot == 3] = 3
+totalfuelload$plot.new[totalfuelload$Transect == "B" & totalfuelload$Plot == 1] = 4
+totalfuelload$plot.new[totalfuelload$Transect == "B" & totalfuelload$Plot == 2] = 5
+totalfuelload$plot.new[totalfuelload$Transect == "B" & totalfuelload$Plot == 3] = 6
+##specific for tree canopy plots
+totalfuelload$plot.new[totalfuelload$Layer %in% c("DeciduousTree", "EvergreenTree") & totalfuelload$Plot == 1] = 1
+totalfuelload$plot.new[totalfuelload$Layer %in% c("DeciduousTree", "EvergreenTree") & totalfuelload$Plot == 2] = 2
+totalfuelload$plot.new[totalfuelload$Layer %in% c("DeciduousTree", "EvergreenTree") & totalfuelload$Plot == 3] = 3
+totalfuelload$plot.new[totalfuelload$Layer %in% c("DeciduousTree", "EvergreenTree") & totalfuelload$Plot ==4 ] = 4
+totalfuelload$plot.new[totalfuelload$Layer %in% c("DeciduousTree", "EvergreenTree") & totalfuelload$Plot == 5] = 5
+totalfuelload$plot.new[totalfuelload$Layer %in% c("DeciduousTree", "EvergreenTree") & totalfuelload$Plot == 6] = 6
+totalfuelload$plot.new[totalfuelload$Layer %in% c("DeciduousTree", "EvergreenTree") & totalfuelload$Plot == 7] = 7
+totalfuelload$plot.new[totalfuelload$Layer %in% c("DeciduousTree", "EvergreenTree") & totalfuelload$Plot == 8] = 8
+totalfuelload$plot.new[totalfuelload$Layer %in% c("DeciduousTree", "EvergreenTree") & totalfuelload$Plot == 9] = 9
+totalfuelload$plot.new[totalfuelload$Layer %in% c("DeciduousTree", "EvergreenTree") & totalfuelload$Plot == 10] = 10
+totalfuelload$plot.new[totalfuelload$Layer %in% c("DeciduousTree", "EvergreenTree") & totalfuelload$Plot == 11] = 11
+totalfuelload$plot.new[totalfuelload$Layer %in% c("DeciduousTree", "EvergreenTree") & totalfuelload$Plot == 12] = 12
+totalfuelload$plot.new[totalfuelload$Layer == "TallDeciduousShrub"] = 1
+totalfuelload$plot.new[totalfuelload$Layer == "Seedling"] = 1
+totalfuelload$plot.new[totalfuelload$Layer == "DeadDownedWood" & totalfuelload$Transect == "A"] = 1
+totalfuelload$plot.new[totalfuelload$Layer == "DeadDownedWood" & totalfuelload$Transect == "B"] = 2
+totalfuelload$plot.new = as.factor(totalfuelload$plot.new)
+totalfuelload = totalfuelload[,-c(2,3,4,6)]
+totalfuelload$plot.new = as.factor(totalfuelload$plot.new)
+str(totalfuelload)
+##Add column Category to totalfuelload dataframe
+totalfuelload$Category = NA
+totalfuelload$Category[totalfuelload$Layer %in% c("DeciduousTree","EvergreenTree")] = "Canopy"
+totalfuelload$Category[totalfuelload$Layer %in% c("TallDeciduousShrub","DeciduousLeaf","EvergreenLeaf","Seedling","Graminoid","Forb","SphagnumMoss","FeatherMoss","ColonizerMoss","Lichen","DeadDownedWood")] = "Understory"
+totalfuelload$Category[totalfuelload$Layer %in% c("Fibric","Mesic")] = "OrganicSoil"
+totalfuelload$Category = as.factor(totalfuelload$Category)
+
+#Left_join totalfuelload and envi data frames by site and format
+totalfuelload = left_join(totalfuelload, envi, by = "Site")
+##Add column severity_class to totalfuelload dataframe, convert burn severity to classes 1 - 3 for Low - High
+totalfuelload$Severity_Class = NA
+totalfuelload$Severity_Class[totalfuelload$Burn_Severity == "LOW"] = 1
+totalfuelload$Severity_Class[totalfuelload$Burn_Severity == "MOD"] = 2
+totalfuelload$Severity_Class[totalfuelload$Burn_Severity == "HIGH"] = 3
+##Convert Topo_Position to a factor
+totalfuelload$Topo_Position = as.factor(totalfuelload$Topo_Position)
+##Calculate means of values for active layer with -999s from similar aged, nearby sites
+totalfuelload$Avg_activelayer[totalfuelload$Site %in% c("BFY10", "BFY9")] = mean(totalfuelload$Avg_activelayer[totalfuelload$Site %in% c("BFY7", "BFY8")])
+totalfuelload$Avg_activelayer[totalfuelload$Site %in% c("DCY14", "DCY2")] = mean(totalfuelload$Avg_activelayer[totalfuelload$Site %in% c("DCY3", "DCY4", "DCY9")])
+totalfuelload$Avg_activelayer[totalfuelload$Site %in% c("UP4D")] = mean(totalfuelload$Avg_activelayer[totalfuelload$Site %in% c("GSM5", "MDI4")]) #no sites very close to UP4D but these two sites are of similar moisture and are mature/intermediate
+##Create permafrost presence absence column, if -888 then permafrost is absent
+totalfuelload$PermaPresent = 1
+totalfuelload$PermaPresent[totalfuelload$Avg_activelayer == -888] = 0 #Keep this as a number/integer because this needs to multiply with avg_active layer and cancel it out if the value is -888
+##Change -888 values to NAs before scaling because it will affect the rescaling of other values, afterwards, change back to -888
+totalfuelload$Avg_activelayer[totalfuelload$Avg_activelayer ==-888] = NA
+totalfuelload$AvgAL.scale = scale(totalfuelload[,13], scale = TRUE)  #scaling avg active layer
+str(totalfuelload)
+##Change NA back to -888 in Avg_activelayer and AvgAL.scale columns
+totalfuelload$Avg_activelayer[is.na(totalfuelload$Avg_activelayer)] = -888
+totalfuelload$AvgAL.scale[is.na(totalfuelload$AvgAL.scale)] = -888
+###Filling in missing values for surficial geology using USGS geology map for Alaska, https://alaska.usgs.gov/science/geology/state_map/interactive_map/AKgeologic_map.html
+totalfuelload$Surficial_Geology[totalfuelload$Site == "BDM1"] = 5
+totalfuelload$Surficial_Geology[totalfuelload$Site %in% c("DCY14", "DCY3", "DCY4", "DCY9", "LGI2", "UP4D", "WCM2")] = 4
+totalfuelload$Surficial_Geology[totalfuelload$Site == "DCY2"] = 7
+##Convert surficial geology to a factor
+totalfuelload$Surficial_Geology = as.factor(totalfuelload$Surficial_Geology)
+##Covert age class to factor
+totalfuelload$Age_Class = as.factor(totalfuelload$Age_Class)
+##Scale the predictors avg_active Layer and elevation because these are numeric and have much larger numbers
+totalfuelload$Elev.scale = scale(totalfuelload[,10], scale = TRUE)  #scaling elevation
+##Rescale Slope and Aspect
+totalfuelload$Slope.scale = scale(totalfuelload[,8], scale = TRUE)
+totalfuelload$Aspect.scale = scale(totalfuelload[,9], scale = TRUE)
+##Fill in missing Time Since Fire values based on fire scar info
+totalfuelload$TimeSinceFire[totalfuelload$Site %in% c("BCEFM2", "BDM1", "MDM1", "WCM2")] = 89
+
+##Transform using log + 1
+totalfuelload$log1.FL = log(totalfuelload$FuelLoad.kg.m2 + 1)   #This transformation should make the residuals normal in the lmer
