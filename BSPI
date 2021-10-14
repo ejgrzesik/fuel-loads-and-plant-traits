@@ -192,3 +192,5 @@ os_sitesum$Site = as.factor(levels(os_fuelload$Site))
 bspi = flam_bysite
 bspi$OSFuelLoad = os_sitesum$FuelLoad.kg.m2
 bspi$BSPI = bspi$FI / bspi$OSFuelLoad
+
+
