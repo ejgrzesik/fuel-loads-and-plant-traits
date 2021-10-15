@@ -71,9 +71,7 @@ str(totalfuelload)
 totalfuelload$Avg_activelayer[is.na(totalfuelload$Avg_activelayer)] = -888
 totalfuelload$AvgAL.scale[is.na(totalfuelload$AvgAL.scale)] = -888
 ###Filling in missing values for surficial geology using USGS geology map for Alaska, https://alaska.usgs.gov/science/geology/state_map/interactive_map/AKgeologic_map.html
-totalfuelload$Surficial_Geology[totalfuelload$Site == "BDM1"] = 5
-totalfuelload$Surficial_Geology[totalfuelload$Site %in% c("DCY14", "DCY3", "DCY4", "DCY9", "LGI2", "UP4D", "WCM2")] = 4
-totalfuelload$Surficial_Geology[totalfuelload$Site == "DCY2"] = 7
+totalfuelload$Surficial_Geology[totalfuelload$Site == "BDM1"] = 5; totalfuelload$Surficial_Geology[totalfuelload$Site %in% c("DCY14", "DCY3", "DCY4", "DCY9", "LGI2", "UP4D", "WCM2")] = 4; totalfuelload$Surficial_Geology[totalfuelload$Site == "DCY2"] = 7
 ##Convert surficial geology to a factor
 totalfuelload$Surficial_Geology = as.factor(totalfuelload$Surficial_Geology)
 ##Covert age class to factor
@@ -81,10 +79,304 @@ totalfuelload$Age_Class = as.factor(totalfuelload$Age_Class)
 ##Scale the predictors avg_active Layer and elevation because these are numeric and have much larger numbers
 totalfuelload$Elev.scale = scale(totalfuelload[,10], scale = TRUE)  #scaling elevation
 ##Rescale Slope and Aspect
-totalfuelload$Slope.scale = scale(totalfuelload[,8], scale = TRUE)
-totalfuelload$Aspect.scale = scale(totalfuelload[,9], scale = TRUE)
+totalfuelload$Slope.scale = scale(totalfuelload[,8], scale = TRUE) ; totalfuelload$Aspect.scale = scale(totalfuelload[,9], scale = TRUE)
 ##Fill in missing Time Since Fire values based on fire scar info
 totalfuelload$TimeSinceFire[totalfuelload$Site %in% c("BCEFM2", "BDM1", "MDM1", "WCM2")] = 89
 
 ##Transform using log + 1
 totalfuelload$log1.FL = log(totalfuelload$FuelLoad.kg.m2 + 1)   #This transformation should make the residuals normal in the lmer
+
+#Develop model for predicting organic soil fuel load
+##subset organic soil fuel load
+fl_org = subset(totalfuelload, Category == "OrganicSoil")
+## test random effects structure
+org_rand1 = lmer(log1.FL ~ 1 + (1|Site), data = fl_org, REML = TRUE)
+org_rand2 = lmer(log1.FL ~ 1 + (1|Site/plot.new), data = fl_org, REML = TRUE)
+anova(org_rand1, org_rand2)
+AIC(org_rand1, org_rand2)
+##Create models with biologically important predictors: Age, Moisture, Elev.scale, AvgAL.scale, Surficial_Geology, Topo_Position, and PermaPresent
+org_lmer1a = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_org, REML = FALSE)
+org_lmer1b = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_org, REML = FALSE)
+org_lmer1c = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_org, REML = FALSE)
+org_lmer1d = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_org, REML = FALSE)
+org_lmer2a = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology +(1|Site), data = fl_org, REML = FALSE)
+org_lmer2b = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Topo_Position +(1|Site), data = fl_org, REML = FALSE)
+org_lmer2c = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + (1|Site), data = fl_org, REML = FALSE)
+org_lmer3a = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology + (1|Site), data = fl_org, REML = FALSE)
+org_lmer3b = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Topo_Position +(1|Site), data = fl_org, REML = FALSE)
+org_lmer3c = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale +(1|Site), data = fl_org, REML = FALSE)
+org_lmer3d = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + (1|Site), data = fl_org, REML = FALSE)
+org_lmer3e = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Topo_Position +(1|Site), data = fl_org, REML = FALSE)
+org_lmer3f = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale +(1|Site), data = fl_org, REML = FALSE)
+org_lmer3g = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + (1|Site), data = fl_org, REML = FALSE)
+org_lmer3h = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Topo_Position +(1|Site), data = fl_org, REML = FALSE)
+org_lmer3i = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale +(1|Site), data = fl_org, REML = FALSE)
+org_lmer4a = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class + (1|Site), data = fl_org, REML = FALSE)
+org_lmer4b = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+Elev.scale + (1|Site), data = fl_org, REML = FALSE)
+org_lmer4c = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent +  Moisture_Class*Elev.scale + (1|Site), data = fl_org, REML = FALSE)
+org_lmer4d = lmer(log1.FL ~ TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + (1|Site), data = fl_org, REML = FALSE)
+org_lmer4e = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class + (1|Site), data = fl_org, REML = FALSE)
+org_lmer4f = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Elev.scale + (1|Site), data = fl_org, REML = FALSE)
+org_lmer4g = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + Moisture_Class*Elev.scale + (1|Site), data = fl_org, REML = FALSE)
+org_lmer4h = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + Moisture_Class + (1|Site), data = fl_org, REML = FALSE)
+org_lmer4i = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent +Elev.scale + (1|Site), data = fl_org, REML = FALSE)
+org_lmer4j = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + (1|Site), data = fl_org, REML = FALSE)
+org_lmer4k = lmer(log1.FL ~ TimeSinceFire+Moisture_Class + (1|Site), data = fl_org, REML = FALSE)
+org_lmer4l = lmer(log1.FL ~ AvgAL.scale:PermaPresent + Moisture_Class + (1|Site), data = fl_org, REML = FALSE)
+org_lmer5a = lmer(log1.FL ~ AvgAL.scale:PermaPresent + Surficial_Geology + Topo_Position + (1|Site), data = fl_org, REML = FALSE)
+org_lmer5b = lmer(log1.FL ~ AvgAL.scale:PermaPresent + Surficial_Geology +  (1|Site), data = fl_org, REML = FALSE)
+org_lmer5c = lmer(log1.FL ~ AvgAL.scale:PermaPresent + Topo_Position + (1|Site), data = fl_org, REML = FALSE)
+org_lmer5d = lmer(log1.FL ~ Surficial_Geology + Topo_Position + (1|Site), data = fl_org, REML = FALSE)
+org_lmer5e = lmer(log1.FL ~ AvgAL.scale:PermaPresent + Surficial_Geology + Topo_Position + (1|Site), data = fl_org, REML = FALSE)
+org_lmer5f = lmer(log1.FL ~  Topo_Position + (1|Site), data = fl_org, REML = FALSE)
+org_lmer5g = lmer(log1.FL ~ AvgAL.scale:PermaPresent + (1|Site), data = fl_org, REML = FALSE)
+##Compare the models using AIC
+library(AICcmodavg)
+AIC(org_lmer1a, org_lmer1b, org_lmer1c, org_lmer1d, 
+    org_lmer2a, org_lmer2b, org_lmer2c, 
+    org_lmer3a, org_lmer3b,org_lmer3c,org_lmer3d,org_lmer3e,org_lmer3f,org_lmer3g,org_lmer3h, org_lmer3i,
+    org_lmer4a, org_lmer4b,org_lmer4c,org_lmer4d,org_lmer4e, org_lmer4f,org_lmer4g,org_lmer4h, org_lmer4i, org_lmer4j,org_lmer4k,org_lmer4l)
+ModNames1a = c("org_lmer1a", "org_lmer1b", "org_lmer1c", "org_lmer1d", 
+             "org_lmer2a", "org_lmer2b", "org_lmer2c", 
+             "org_lmer3a", "org_lmer3b","org_lmer3c","org_lmer3d","org_lmer3e","org_lmer3f","org_lmer3g","org_lmer3h","org_lmer3i",
+             "org_lmer4a","org_lmer4b","org_lmer4c","org_lmer4d","org_lmer4e","org_lmer4f","org_lmer4g","org_lmer4h","org_lmer4i","org_lmer4j","org_lmer4k","org_lmer4l")
+org_AIC = aictab(list(org_lmer1a, org_lmer1b, org_lmer1c, org_lmer1d, 
+            org_lmer2a, org_lmer2b, org_lmer2c, 
+            org_lmer3a, org_lmer3b,org_lmer3c,org_lmer3d,org_lmer3e,org_lmer3f,org_lmer3g,org_lmer3h, org_lmer3i,
+            org_lmer4a, org_lmer4b,org_lmer4c,org_lmer4d,org_lmer4e, org_lmer4f,org_lmer4g,org_lmer4h, org_lmer4i, org_lmer4j,org_lmer4k,org_lmer4l),
+       modnames = ModNames1a)
+print(org_AIC)
+org_AICtable = data.frame(org_AIC)
+##Obtain parameter estimates for best model, with REML set to T
+org_lmer.best = lmer(log1.FL ~ 0+TimeSinceFire+Moisture_Class + (1|Site), data = fl_org, REML = TRUE)
+summary(org_lmer.best)
+
+#Develop model for predicting vascular understory fuel load
+##subset totalfuelload dataframe to just include understory plants
+fl_und = subset(totalfuelload, Category == "Understory")
+fl_und$Type = NA
+fl_und$Type[fl_und$Layer %in% c("ColonizerMoss", "Lichen", "FeatherMoss", "SphagnumMoss")] = "Nonvascular"
+fl_und$Type[fl_und$Layer %in% c("DeadDownedWood","ShortShrub","Forb","Graminoid","Seedling","TallDeciduousShrub")] = "Vascular" #grouping evergeen and short deciduous shrubs together, as short shrub, and excluding dead downed wood
+fl_und$Type = as.factor(fl_und$Type)
+fl_vund = subset(fl_und, Type == "Vascular")
+##test random effects structure
+vund_rand1 = lmer(log1.FL ~ 1 + (1|Site), data = fl_und, REML = TRUE)
+vund_rand2 = lmer(log1.FL ~ 1 + (1|Site/plot.new), data = fl_und, REML = TRUE)
+anova(vund_rand1, vund_rand2)#Trouble with this because of unabalanced data, i.e. not all measurements taken for 6 plots...
+AIC(vund_rand1, vund_rand2) #The models are not significantly different, and the delta AIC is 2, so use the simpler random effects structure?
+##Create models with biologically important predictors: Age, Moisture, Elev.scale, AvgAL.scale, Surficial_Geology, Topo_Position, and PermaPresent
+vund_lmer1a = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_vund, REML = FALSE)
+vund_lmer1b = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_vund, REML = FALSE)
+vund_lmer1c = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_vund, REML = FALSE)
+vund_lmer1d = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_vund, REML = FALSE)
+vund_lmer2a = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology +(1|Site), data = fl_vund, REML = FALSE)
+vund_lmer2b = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Topo_Position +(1|Site), data = fl_vund, REML = FALSE)
+vund_lmer2c = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer3a = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer3b = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Topo_Position +(1|Site), data = fl_vund, REML = FALSE)
+vund_lmer3c = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale +(1|Site), data = fl_vund, REML = FALSE)
+vund_lmer3d = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer3e = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Topo_Position +(1|Site), data = fl_vund, REML = FALSE)
+vund_lmer3f = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale +(1|Site), data = fl_vund, REML = FALSE)
+vund_lmer3g = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer3h = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Topo_Position +(1|Site), data = fl_vund, REML = FALSE)
+vund_lmer3i = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale +(1|Site), data = fl_vund, REML = FALSE)
+vund_lmer4a = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer4b = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+Elev.scale + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer4c = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent +  Moisture_Class*Elev.scale + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer4d = lmer(log1.FL ~ TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer4e = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer4f = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Elev.scale + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer4g = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + Moisture_Class*Elev.scale + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer4h = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + Moisture_Class + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer4i = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent +Elev.scale + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer4j = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer4k = lmer(log1.FL ~ TimeSinceFire + Moisture_Class + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer5a = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+ Surficial_Geology + Topo_Position + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer5b = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+Elev.scale + Surficial_Geology + Topo_Position + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer5c = lmer(log1.FL ~ TimeSinceFire + Moisture_Class+Elev.scale + Surficial_Geology + Topo_Position + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer5d = lmer(log1.FL ~ AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + Topo_Position + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer5e = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Surficial_Geology + Topo_Position + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer5f = lmer(log1.FL ~ TimeSinceFire + Moisture_Class + Surficial_Geology + Topo_Position + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer5g = lmer(log1.FL ~ AvgAL.scale:PermaPresent+ Moisture_Class+ Surficial_Geology + Topo_Position + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer5h = lmer(log1.FL ~ TimeSinceFire + Surficial_Geology + Topo_Position + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer5i = lmer(log1.FL ~ Moisture_Class+ Surficial_Geology + Topo_Position + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer5j = lmer(log1.FL ~ AvgAL.scale:PermaPresent+Elev.scale+ Surficial_Geology + Topo_Position + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer5k = lmer(log1.FL ~ Elev.scale+ Surficial_Geology + Topo_Position + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer5l = lmer(log1.FL ~ Surficial_Geology + Topo_Position + (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer5m = lmer(log1.FL ~ Surficial_Geology +  (1|Site), data = fl_vund, REML = FALSE)
+vund_lmer5n = lmer(log1.FL ~ Topo_Position + (1|Site), data = fl_vund, REML = FALSE)
+##Compare the models using AIC
+AIC(vund_lmer1a, vund_lmer1b, vund_lmer1c, vund_lmer1d, 
+    vund_lmer2a, vund_lmer2b, vund_lmer2c, 
+    vund_lmer3a, vund_lmer3b,vund_lmer3c,vund_lmer3d,vund_lmer3e,vund_lmer3f,vund_lmer3g,vund_lmer3h, vund_lmer3i,
+    vund_lmer4a, vund_lmer4b,vund_lmer4c,vund_lmer4d,vund_lmer4e, vund_lmer4f,vund_lmer4g,vund_lmer4h, vund_lmer4i, vund_lmer4j,vund_lmer4k,
+    vund_lmer5a, vund_lmer5b,vund_lmer5c,vund_lmer5d,vund_lmer5e, vund_lmer5f,vund_lmer5g,vund_lmer5h,vund_lmer5i, vund_lmer5j,vund_lmer5k,vund_lmer5l,vund_lmer5m, vund_lmer5n)
+ModNames2 = c("vund_lmer1a", "vund_lmer1b", "vund_lmer1c", "vund_lmer1d", 
+             "vund_lmer2a", "vund_lmer2b", "vund_lmer2c", 
+             "vund_lmer3a", "vund_lmer3b","vund_lmer3c","vund_lmer3d","vund_lmer3e","vund_lmer3f","vund_lmer3g","vund_lmer3h","vund_lmer3i",
+             "vund_lmer4a","vund_lmer4b","vund_lmer4c","vund_lmer4d","vund_lmer4e","vund_lmer4f","vund_lmer4g","vund_lmer4h","vund_lmer4i","vund_lmer4j","vund_lmer4k",
+             "vund_lmer5a","vund_lmer5b","vund_lmer5c","vund_lmer5d","vund_lmer5e","vund_lmer5f","vund_lmer5g","vund_lmer5h","vund_lmer5i","vund_lmer5j","vund_lmer5k","vund_lmer5l","vund_lmer5m","vund_lmer5n")
+vund_AIC = aictab(list(vund_lmer1a, vund_lmer1b, vund_lmer1c, vund_lmer1d, 
+                      vund_lmer2a, vund_lmer2b, vund_lmer2c, 
+                      vund_lmer3a, vund_lmer3b,vund_lmer3c,vund_lmer3d,vund_lmer3e,vund_lmer3f,vund_lmer3g,vund_lmer3h, vund_lmer3i,
+                      vund_lmer4a, vund_lmer4b,vund_lmer4c,vund_lmer4d,vund_lmer4e, vund_lmer4f,vund_lmer4g,vund_lmer4h, vund_lmer4i, vund_lmer4j,vund_lmer4k,
+                      vund_lmer5a, vund_lmer5b,vund_lmer5c,vund_lmer5d,vund_lmer5e, vund_lmer5f,vund_lmer5g,vund_lmer5h,vund_lmer5i, vund_lmer5j,vund_lmer5k,vund_lmer5l,vund_lmer5m, vund_lmer5n),
+                 modnames = ModNames2)
+print(vund_AIC)
+vund_AICtable = data.frame(vund_AIC)
+  #write.csv(vund_AICtable, "VascularUnderstory_lmerAIC.csv")
+anova(vund_lmer4j, vund_lmer4k)
+anova(vund_lmer4k, vund_lmer4e)
+##Determine parameter estimates for vund_lmer4j and vund_lmer4e
+vund_lmer.best = lmer(log1.FL ~ 0+TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + (1|Site), data = fl_vund, REML = TRUE)
+summary(vund_lmer.best)
+
+#Develop model for predicting nonvascular understory
+##subset data
+fl_nund = subset(fl_und, Type == "Nonvascular")
+#test random effects structure
+nund_rand1 = lmer(log1.FL ~ 1 + (1|Site), data = fl_nund, REML =TRUE)
+nund_rand2 = lmer(log1.FL ~ 1 + (1|Site/plot.new), data = fl_nund, REML =TRUE)
+anova(nund_rand1, nund_rand2)
+AIC(nund_rand1, nund_rand2)
+##Create models with biologically important predictors: Age, Moisture, Elev.scale, AvgAL.scale, Surficial_Geology, Topo_Position, and PermaPresent
+nund_lmer1a = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_nund, REML = FALSE)
+nund_lmer1b = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_nund, REML = FALSE)
+nund_lmer1c = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_nund, REML = FALSE)
+nund_lmer1d = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_nund, REML = FALSE)
+nund_lmer2a = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology +(1|Site), data = fl_nund, REML = FALSE)
+nund_lmer2b = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Topo_Position +(1|Site), data = fl_nund, REML = FALSE)
+nund_lmer2c = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer3a = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer3b = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Topo_Position +(1|Site), data = fl_nund, REML = FALSE)
+nund_lmer3c = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale +(1|Site), data = fl_nund, REML = FALSE)
+nund_lmer3d = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer3e = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Topo_Position +(1|Site), data = fl_nund, REML = FALSE)
+nund_lmer3f = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale +(1|Site), data = fl_nund, REML = FALSE)
+nund_lmer3g = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer3h = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Topo_Position +(1|Site), data = fl_nund, REML = FALSE)
+nund_lmer3i = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale +(1|Site), data = fl_nund, REML = FALSE)
+nund_lmer4a = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer4b = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+Elev.scale + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer4c = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent +  Moisture_Class*Elev.scale + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer4d = lmer(log1.FL ~ TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer4e = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer4f = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Elev.scale + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer4g = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + Moisture_Class*Elev.scale + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer4h = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + Moisture_Class + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer4i = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent +Elev.scale + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer4j = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer4k = lmer(log1.FL ~ TimeSinceFire + Moisture_Class + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer5a = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+ Surficial_Geology + Topo_Position + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer5b = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+Elev.scale + Surficial_Geology + Topo_Position + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer5c = lmer(log1.FL ~ TimeSinceFire + Moisture_Class+Elev.scale + Surficial_Geology + Topo_Position + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer5d = lmer(log1.FL ~ AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + Topo_Position + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer5e = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Surficial_Geology + Topo_Position + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer5f = lmer(log1.FL ~ TimeSinceFire + Moisture_Class + Surficial_Geology + Topo_Position + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer5g = lmer(log1.FL ~ AvgAL.scale:PermaPresent+ Moisture_Class+ Surficial_Geology + Topo_Position + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer5h = lmer(log1.FL ~ TimeSinceFire + Surficial_Geology + Topo_Position + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer5i = lmer(log1.FL ~ Moisture_Class+ Surficial_Geology + Topo_Position + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer5j = lmer(log1.FL ~ AvgAL.scale:PermaPresent+Elev.scale+ Surficial_Geology + Topo_Position + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer5k = lmer(log1.FL ~ Elev.scale+ Surficial_Geology + Topo_Position + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer5l = lmer(log1.FL ~ Surficial_Geology + Topo_Position + (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer5m = lmer(log1.FL ~ Surficial_Geology +  (1|Site), data = fl_nund, REML = FALSE)
+nund_lmer5n = lmer(log1.FL ~ Topo_Position + (1|Site), data = fl_nund, REML = FALSE)
+##Compare the models using AIC
+AIC(nund_lmer1a, nund_lmer1b, nund_lmer1c, nund_lmer1d, 
+    nund_lmer2a, nund_lmer2b, nund_lmer2c, 
+    nund_lmer3a, nund_lmer3b,nund_lmer3c,nund_lmer3d,nund_lmer3e,nund_lmer3f,nund_lmer3g,nund_lmer3h, nund_lmer3i,
+    nund_lmer4a, nund_lmer4b,nund_lmer4c,nund_lmer4d,nund_lmer4e, nund_lmer4f,nund_lmer4g,nund_lmer4h, nund_lmer4i, nund_lmer4j,nund_lmer4k,
+    nund_lmer5a, nund_lmer5b,nund_lmer5c,nund_lmer5d,nund_lmer5e, nund_lmer5f,nund_lmer5g,nund_lmer5h,nund_lmer5i, nund_lmer5j,nund_lmer5k,nund_lmer5l,nund_lmer5m, nund_lmer5n)
+ModNames3 = c("nund_lmer1a", "nund_lmer1b", "nund_lmer1c", "nund_lmer1d", 
+              "nund_lmer2a", "nund_lmer2b", "nund_lmer2c", 
+              "nund_lmer3a", "nund_lmer3b","nund_lmer3c","nund_lmer3d","nund_lmer3e","nund_lmer3f","nund_lmer3g","nund_lmer3h","nund_lmer3i",
+              "nund_lmer4a","nund_lmer4b","nund_lmer4c","nund_lmer4d","nund_lmer4e","nund_lmer4f","nund_lmer4g","nund_lmer4h","nund_lmer4i","nund_lmer4j","nund_lmer4k",
+              "nund_lmer5a","nund_lmer5b","nund_lmer5c","nund_lmer5d","nund_lmer5e","nund_lmer5f","nund_lmer5g","nund_lmer5h","nund_lmer5i","nund_lmer5j","nund_lmer5k","nund_lmer5l","nund_lmer5m","nund_lmer5n")
+nund_AIC = aictab(list(nund_lmer1a, nund_lmer1b, nund_lmer1c, nund_lmer1d, 
+                       nund_lmer2a, nund_lmer2b, nund_lmer2c, 
+                       nund_lmer3a, nund_lmer3b,nund_lmer3c,nund_lmer3d,nund_lmer3e,nund_lmer3f,nund_lmer3g,nund_lmer3h, nund_lmer3i,
+                       nund_lmer4a, nund_lmer4b,nund_lmer4c,nund_lmer4d,nund_lmer4e, nund_lmer4f,nund_lmer4g,nund_lmer4h, nund_lmer4i, nund_lmer4j,nund_lmer4k,
+                       nund_lmer5a, nund_lmer5b,nund_lmer5c,nund_lmer5d,nund_lmer5e, nund_lmer5f,nund_lmer5g,nund_lmer5h,nund_lmer5i, nund_lmer5j,nund_lmer5k,nund_lmer5l,nund_lmer5m, nund_lmer5n),
+                  modnames = ModNames3)
+print(nund_AIC)
+nund_AICtable = data.frame(nund_AIC)
+#write.csv(nund_AICtable, "NonvascularUnderstory_lmerAIC.csv")
+##Coefficients of nund_lmer4e with REML = TRUE
+nund_lmer.best = lmer(log1.FL ~ 0 + TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class + (1|Site), data = fl_nund, REML = TRUE)
+summary(nund_lmer.best)
+
+#Develop model for predicting tree fuel loads
+fl_can = subset(totalfuelload, Category == "Canopy")
+#test random effects structure
+can_rand1 = lmer(log1.FL ~ 1 + (1|Site), data = fl_can, REML = TRUE)
+can_rand2 = lmer(log1.FL ~ 1 + (1|Site/plot.new), data = fl_can, REML = TRUE)
+anova(can_rand1, can_rand2)
+AIC(can_rand1, can_rand2) #The models are not significantly different, and the delta AIC is 2, so use the simpler random effects structure?
+##Create models with biologically important predictors: Age, Moisture, Elev.scale, AvgAL.scale, Surficial_Geology, Topo_Position, and PermaPresent
+can_lmer1a = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_can, REML = FALSE)
+can_lmer1b = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_can, REML = FALSE)
+can_lmer1c = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_can, REML = FALSE)
+can_lmer1d = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + Topo_Position +(1|Site), data = fl_can, REML = FALSE)
+can_lmer2a = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology +(1|Site), data = fl_can, REML = FALSE)
+can_lmer2b = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Topo_Position +(1|Site), data = fl_can, REML = FALSE)
+can_lmer2c = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + (1|Site), data = fl_can, REML = FALSE)
+can_lmer3a = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Surficial_Geology + (1|Site), data = fl_can, REML = FALSE)
+can_lmer3b = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + Topo_Position +(1|Site), data = fl_can, REML = FALSE)
+can_lmer3c = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale +(1|Site), data = fl_can, REML = FALSE)
+can_lmer3d = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + (1|Site), data = fl_can, REML = FALSE)
+can_lmer3e = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Topo_Position +(1|Site), data = fl_can, REML = FALSE)
+can_lmer3f = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale +(1|Site), data = fl_can, REML = FALSE)
+can_lmer3g = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + (1|Site), data = fl_can, REML = FALSE)
+can_lmer3h = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Topo_Position +(1|Site), data = fl_can, REML = FALSE)
+can_lmer3i = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale +(1|Site), data = fl_can, REML = FALSE)
+can_lmer4a = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class + (1|Site), data = fl_can, REML = FALSE)
+can_lmer4b = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+Elev.scale + (1|Site), data = fl_can, REML = FALSE)
+can_lmer4c = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent +  Moisture_Class*Elev.scale + (1|Site), data = fl_can, REML = FALSE)
+can_lmer4d = lmer(log1.FL ~ TimeSinceFire:AvgAL.scale:PermaPresent + AvgAL.scale:PermaPresent+ Moisture_Class*Elev.scale + (1|Site), data = fl_can, REML = FALSE)
+can_lmer4e = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class + (1|Site), data = fl_can, REML = FALSE)
+can_lmer4f = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Elev.scale + (1|Site), data = fl_can, REML = FALSE)
+can_lmer4g = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + Moisture_Class*Elev.scale + (1|Site), data = fl_can, REML = FALSE)
+can_lmer4h = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + Moisture_Class + (1|Site), data = fl_can, REML = FALSE)
+can_lmer4i = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent +Elev.scale + (1|Site), data = fl_can, REML = FALSE)
+can_lmer4j = lmer(log1.FL ~ TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + (1|Site), data = fl_can, REML = FALSE)
+can_lmer4k = lmer(log1.FL ~ TimeSinceFire + Moisture_Class + (1|Site), data = fl_can, REML = FALSE)
+can_lmer5a = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class+ Surficial_Geology + Topo_Position + (1|Site), data = fl_can, REML = FALSE)
+can_lmer5b = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+Elev.scale + Surficial_Geology + Topo_Position + (1|Site), data = fl_can, REML = FALSE)
+can_lmer5c = lmer(log1.FL ~ TimeSinceFire + Moisture_Class+Elev.scale + Surficial_Geology + Topo_Position + (1|Site), data = fl_can, REML = FALSE)
+can_lmer5d = lmer(log1.FL ~ AvgAL.scale:PermaPresent+ Moisture_Class+Elev.scale + Surficial_Geology + Topo_Position + (1|Site), data = fl_can, REML = FALSE)
+can_lmer5e = lmer(log1.FL ~ TimeSinceFire + AvgAL.scale:PermaPresent+ Surficial_Geology + Topo_Position + (1|Site), data = fl_can, REML = FALSE)
+can_lmer5f = lmer(log1.FL ~ TimeSinceFire + Moisture_Class + Surficial_Geology + Topo_Position + (1|Site), data = fl_can, REML = FALSE)
+can_lmer5g = lmer(log1.FL ~ AvgAL.scale:PermaPresent+ Moisture_Class+ Surficial_Geology + Topo_Position + (1|Site), data = fl_can, REML = FALSE)
+can_lmer5h = lmer(log1.FL ~ TimeSinceFire + Surficial_Geology + Topo_Position + (1|Site), data = fl_can, REML = FALSE)
+can_lmer5i = lmer(log1.FL ~ Moisture_Class+ Surficial_Geology + Topo_Position + (1|Site), data = fl_can, REML = FALSE)
+can_lmer5j = lmer(log1.FL ~ AvgAL.scale:PermaPresent+Elev.scale+ Surficial_Geology + Topo_Position + (1|Site), data = fl_can, REML = FALSE)
+can_lmer5k = lmer(log1.FL ~ Elev.scale+ Surficial_Geology + Topo_Position + (1|Site), data = fl_can, REML = FALSE)
+can_lmer5l = lmer(log1.FL ~ Surficial_Geology + Topo_Position + (1|Site), data = fl_can, REML = FALSE)
+can_lmer5m = lmer(log1.FL ~ Surficial_Geology +  (1|Site), data = fl_can, REML = FALSE)
+can_lmer5n = lmer(log1.FL ~ Topo_Position + (1|Site), data = fl_can, REML = FALSE)
+##Compare the models using AIC
+AIC(can_lmer1a, can_lmer1b, can_lmer1c, can_lmer1d, 
+    can_lmer2a, can_lmer2b, can_lmer2c, 
+    can_lmer3a, can_lmer3b,can_lmer3c,can_lmer3d,can_lmer3e,can_lmer3f,can_lmer3g,can_lmer3h, can_lmer3i,
+    can_lmer4a, can_lmer4b,can_lmer4c,can_lmer4d,can_lmer4e, can_lmer4f,can_lmer4g,can_lmer4h, can_lmer4i, can_lmer4j,can_lmer4k,
+    can_lmer5a, can_lmer5b,can_lmer5c,can_lmer5d,can_lmer5e, can_lmer5f,can_lmer5g,can_lmer5h,can_lmer5i, can_lmer5j,can_lmer5k,can_lmer5l,can_lmer5m, can_lmer5n)
+ModNames4 = c("can_lmer1a", "can_lmer1b", "can_lmer1c", "can_lmer1d", 
+              "can_lmer2a", "can_lmer2b", "can_lmer2c", 
+              "can_lmer3a", "can_lmer3b","can_lmer3c","can_lmer3d","can_lmer3e","can_lmer3f","can_lmer3g","can_lmer3h","can_lmer3i",
+              "can_lmer4a","can_lmer4b","can_lmer4c","can_lmer4d","can_lmer4e","can_lmer4f","can_lmer4g","can_lmer4h","can_lmer4i","can_lmer4j","can_lmer4k",
+              "can_lmer5a","can_lmer5b","can_lmer5c","can_lmer5d","can_lmer5e","can_lmer5f","can_lmer5g","can_lmer5h","can_lmer5i","can_lmer5j","can_lmer5k","can_lmer5l","can_lmer5m","can_lmer5n")
+can_AIC = aictab(list(can_lmer1a, can_lmer1b, can_lmer1c, can_lmer1d, 
+                       can_lmer2a, can_lmer2b, can_lmer2c, 
+                       can_lmer3a, can_lmer3b,can_lmer3c,can_lmer3d,can_lmer3e,can_lmer3f,can_lmer3g,can_lmer3h, can_lmer3i,
+                       can_lmer4a, can_lmer4b,can_lmer4c,can_lmer4d,can_lmer4e, can_lmer4f,can_lmer4g,can_lmer4h, can_lmer4i, can_lmer4j,can_lmer4k,
+                       can_lmer5a, can_lmer5b,can_lmer5c,can_lmer5d,can_lmer5e, can_lmer5f,can_lmer5g,can_lmer5h,can_lmer5i, can_lmer5j,can_lmer5k,can_lmer5l,can_lmer5m, can_lmer5n),
+                  modnames = ModNames4)
+print(can_AIC)
+can_AICtable = data.frame(can_AIC)
+#write.csv(can_AICtable, "Canopy_lmerAIC.csv")
+##Compare the two best models
+anova(can_lmer3i, can_lmer4e) #p<0.05, so there is justification for the more complex model (3c)
+##Determine parameter estimates for best model
+can_lmer.best = lmer(log1.FL ~ 0+TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent +  Moisture_Class*Elev.scale +(1|Site), data = fl_can, REML = TRUE)
+summary(can_lmer.best)
