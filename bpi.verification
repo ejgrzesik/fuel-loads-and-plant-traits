@@ -380,3 +380,123 @@ anova(can_lmer3i, can_lmer4e) #p<0.05, so there is justification for the more co
 ##Determine parameter estimates for best model
 can_lmer.best = lmer(log1.FL ~ 0+TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent +  Moisture_Class*Elev.scale +(1|Site), data = fl_can, REML = TRUE)
 summary(can_lmer.best)
+
+
+
+#####################################################################################################################
+#2: PREDICT FUEL LOAD VALUES FOR EACH FUEL TYPE USING DATA FROM VERIFICATION SITES (BERNHARDT AND NENANA RIDGE SITES)
+#####################################################################################################################
+
+#import and format data
+bern = read.csv("BernhardtSites_Enviro.csv")
+str(bern)
+##scale active layer and elevation
+bern$AvgAL.scale = scale(bern$Avg_activelayer, scale = TRUE)
+bern$Elev.scale = scale(bern$Elevation, scale = TRUE)
+
+#Predict organic soil fuel load for each fuel type (i.e. fibric, mesic)
+##Add 'Layer' as fixed predictor to best org model, random effect of site not necessary because do not have multiple data points per site
+org.lm = lm(log1.FL ~ 0+TimeSinceFire+Moisture_Class+Layer, data = fl_org)
+summary(org.lm)
+##Subset data frame to only contain org soil layers
+bern.org = bern[bern$Layer %in% c("Fibric", "Mesic"),]
+str(bern.org)
+##use the linear model to predict fibric and mesic values
+bern.org.pred = as.data.frame(predict(org.lm, bern.org))
+colnames(bern.org.pred) = "log1.FL"
+##convert log1.FL back to FL
+bern.org.pred$FL = exp(bern.org.pred$log1.FL) - 1
+##Create primkey in bern.org and add to bern.org.pred dataframe
+bern.org$primkey = as.factor(paste(bern.org$Site, bern.org$Layer, sep = "."))
+bern.org.pred$primkey = bern.org$primkey
+
+#Predict vascular understory fuel load for each understory fuel type
+##Add 'Layer' as fixed predictor to best vasc und model, random effect of site not necessary because do not have multiple data points per site
+vasc.lm = lm(log1.FL ~ 0+TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent + Layer, data = fl_vund)
+summary(vasc.lm)
+##Subset bern data to include just vascular understory
+bern.vasc = bern[bern$Layer %in% c("DeadDownedWood","EvergreenLeaf","DeciduousLeaf","Forb","Graminoid","Seedling","TallDeciduousShrub"),]
+##Use model to predent fuel load values
+bern.vasc.pred = as.data.frame(predict(vasc.lm, bern.vasc))
+colnames(bern.vasc.pred) = "log1.FL"
+bern.vasc.pred$FL = exp(bern.vasc.pred$log1.FL) - 1
+##Create primkey and import into bern.vasc.pred
+bern.vasc$primkey = as.factor(paste(bern.vasc$Site, bern.vasc$Layer, sep = "."))
+bern.vasc.pred$primkey = bern.vasc$primkey
+
+#Predict nonvascular understory fuel load for each understory fuel type
+##Add 'Layer' as fixed predictor to best nonvasc und model, random effect of site not necessary because do not have multiple data points per site
+nonvasc.lm = lm(log1.FL ~ 0+TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_Class + Layer, data = fl_nund)
+summary(nonvasc.lm)
+##Subset bern data to include just nonvascular understory
+bern.nonvasc = bern[bern$Layer %in% c("ColonizerMoss", "Lichen", "FeatherMoss", "SphagnumMoss"),]
+##Use model to predict fuel load values
+bern.nonvasc.pred = as.data.frame(predict(nonvasc.lm, bern.nonvasc))
+colnames(bern.nonvasc.pred) = "log1.FL"
+bern.nonvasc.pred$FL = exp(bern.nonvasc.pred$log1.FL) - 1
+##Create primkey and import into bern.vasc.pred
+bern.nonvasc$primkey = as.factor(paste(bern.nonvasc$Site, bern.nonvasc$Layer, sep = "."))
+bern.nonvasc.pred$primkey = bern.nonvasc$primkey
+
+#Predict tree fuel load for each tree fuel type
+##Add 'Layer' as fixed predictor to best tree canopy model, random effect of site not necessary because do not have multiple data points per site
+tree.lm = lm(log1.FL ~ 0+TimeSinceFire + TimeSinceFire:AvgAL.scale:PermaPresent +  Moisture_Class*Elev.scale + Layer, data = fl_tree)
+summary(tree.lm)
+##Subset bern data to include just tree
+bern.tree = bern[bern$Layer %in% c("EvergreenTree", "DeciduousTree"),]
+##Use model to predict fuel load values
+bern.tree.pred = as.data.frame(predict(tree.lm, bern.tree))
+colnames(bern.tree.pred) = "log1.FL"
+bern.tree.pred$FL = exp(bern.tree.pred$log1.FL) - 1
+##Create primkey and import into bern.vasc.pred
+bern.tree$primkey = as.factor(paste(bern.tree$Site, bern.tree$Layer, sep = "."))
+bern.tree.pred$primkey = bern.tree$primkey
+
+#Join the four dataframes of predicted values
+bern.predicted = rbind(bern.org.pred, bern.vasc.pred, bern.nonvasc.pred, bern.tree.pred)
+bern.predicted = bern.predicted[,-1]
+bern.predicted = bern.predicted[, c(2,1)]
+
+#separate the primkey
+bern.predicted = bern.predicted %>% separate(primkey, into = c("Site", "Layer"), sep = '\\.')
+bern.predicted$Layer = as.factor(bern.predicted$Layer)
+bern.predicted$Site = as.factor(bern.predicted$Site)
+
+####################################################
+#3: USE PREDICTED FUEL LOAD VALUES TO CALCULATE BSPI
+####################################################
+
+#Import and format SpecificLeafArea data
+SpecLA = read.csv("SpecificLeafArea.csv")
+##If plant part = stems, make SLA = NA. Only want to average the SLA of leaves, not other parts
+SpecLA$Plant.part[SpecLA$Plant.part %in% c("stems", "branches")] = FALSE
+##Remove rows with NA in the SLA column (these are rows with bulk density information)
+SpecLA = SpecLA[is.na(SpecLA$SLA.m2.kg) == FALSE,]
+
+#Create new data frame with average SLA for each plant type
+SLA = data.frame(levels(as.factor(SpecLA$PlantType)))
+colnames(SLA) = "PlantType"
+SLA$meanSLA = as.vector(tapply(SpecLA$SLA.m2.kg, SpecLA$PlantType, mean))
+SLA$Layer = SLA$PlantType
+
+#create new dataframe for calculating bspi
+bern.bspi = bern.predicted
+##Create new column in bern.predicted to import SLA values
+bern.bspi$meanSLA = NA
+for(thislayer in unique(SLA$Layer)) {
+  bern.bspi$meanSLA[bern.bspi$Layer == thislayer] = SLA$meanSLA[SLA$Layer == thislayer]
+}
+##remove NA rows
+bern.bspi = bern.bspi[is.na(bern.bspi$meanSLA) == FALSE,]
+
+#Calculate bspi
+bern.bspi$FI = bern.bspi$FL * bern.bspi$meanSLA
+##Create new dataframe to calculate flam for each site
+bern.bspi.site = data.frame(as.factor(levels(bern.bspi$Site)))
+colnames(bern.bspi.site) = "Site"
+bern.bspi.site$FI = as.vector(tapply(bern.bspi$FI, bern.bspi$Site, sum, na.rm = TRUE))
+##separate the primkey in bern.org.pred
+bern.org.pred = bern.org.pred %>% separate(primkey, into = c("Site", "Layer"), sep = '\\.')
+##calculate the sum organic soil fuel load for each site
+bern.bspi.site$os_sitesum = as.vector(tapply(bern.org.pred$FL, bern.org.pred$Site, sum, na.rm = TRUE))
+bern.bspi.site$bspi = bern.bspi.site$FI/bern.bspi.site$os_sitesum
