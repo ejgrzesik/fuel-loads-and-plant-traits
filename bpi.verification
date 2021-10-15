@@ -500,3 +500,45 @@ bern.org.pred = bern.org.pred %>% separate(primkey, into = c("Site", "Layer"), s
 ##calculate the sum organic soil fuel load for each site
 bern.bspi.site$os_sitesum = as.vector(tapply(bern.org.pred$FL, bern.org.pred$Site, sum, na.rm = TRUE))
 bern.bspi.site$bspi = bern.bspi.site$FI/bern.bspi.site$os_sitesum
+
+
+#################################################################
+#4: PLOT BSPI WITH POST-FIRE BURN SEVERITY FOR VERIFICATION SITES
+#################################################################
+#upload ggplot packages
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(reshape2)
+library(ggsci)
+
+#Add burn severity column into bern.bspi.site
+bern.bspi.site$SeverityClass = NA
+for(thissite in unique(bern$Site)) {
+  bern.bspi.site$SeverityClass[bern.bspi.site$Site == thissite] = bern$SeverityClass[bern$Site == thissite]
+}
+##create column of burn severity classes
+bern.bspi.site$Burn_Severity = NA
+bern.bspi.site$Burn_Severity[bern.bspi.site$SeverityClass == 1] = "Low" 
+bern.bspi.site$Burn_Severity[bern.bspi.site$SeverityClass == 2] = "Mod" 
+bern.bspi.site$Burn_Severity[bern.bspi.site$SeverityClass == 3] = "High" 
+bern.bspi.site$Burn_Severity = as.factor(bern.bspi.site$Burn_Severity)
+
+#creat boxplot of bspi vs severity
+bernplot1 = ggplot(data = bern.bspi.site, aes(x = Burn_Severity, y = bspi, color = Burn_Severity))+
+  geom_boxplot(lwd = 1.25)+
+  scale_color_d3()+
+  theme_bw(base_size = 16) +
+  scale_y_continuous(name= "Burn Severity Potential Index") +
+  scale_x_discrete(name = "Burn Severity", limit = c("Low","Mod", "High"))+
+  theme(axis.text.x = element_text(face="bold", colour="black", size=14),
+        axis.text.y = element_text(face="bold", colour="black", size=14),
+        axis.title = element_text(face = "bold", colour = "black", size = 20),
+        axis.ticks = element_line(colour="black", size=1))+
+  theme(panel.grid=element_blank())+
+  theme(strip.text = element_text(face = "bold", colour = "black", size = 13))+
+  theme(legend.position = "none")
+bernplot1
+
+#conduct lm to see if there are significant differences
+summary(lm(bspi~SeverityClass, bern.bspi.site))
