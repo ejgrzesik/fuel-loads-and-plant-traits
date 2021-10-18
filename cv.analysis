@@ -58,3 +58,194 @@ summary(lm(BSPI~sum.cv, cv_bspi[cv_bspi$Species == "H. splendens",]))
 summary(lm(BSPI~sum.cv, cv_bspi[cv_bspi$Species == "V. uliginosum",]))
   #no significant relationship
 
+########################################################################
+#2: COMBINE CV OF BOTH SPECIES TO GET SITE-LEVEL CV AND REDO ANALYSES
+########################################################################
+
+#create new data frame with site-level cv
+cv_comb = data.frame(as.vector(tapply(cv_bspi$sum.cv,
+                                      cv_bspi$Site,
+                                      sum, na.rm = TRUE)))
+colnames(cv_comb) = "SiteCV"
+cv_comb$Site = levels(as.factor(cv_bspi$Site))
+##add environmental data
+cv_comb = left_join(cv_comb, bspi, by = "Site")
+##Keep only sites where both species traits were measured
+cv_comb = cv_comb[cv_comb$Site != "BFY10" &cv_comb$Site != "BFY7" & cv_comb$Site != "BFY8" &
+                    cv_comb$Site != "DCY2" &cv_comb$Site != "DCY3" &cv_comb$Site != "DCY9" &
+                    cv_comb$Site != "MDI5",]
+
+#plot hs cv, vu cv and comb cv together
+##join the data frames
+cv_all = cv_comb
+cv_all$Site = as.factor(cv_all$Site)
+cv_all$Species = NA
+cv_all$Species = "Combined"
+cv_all$sum.cv = cv_all$SiteCV
+cv_all = rbind(cv_all[, c(2,5,23,24)], cv_bspi[, c(1,4,24,22)])
+##create scatterplot of bspi vs sum.cv with different colours for each species
+sum_bspi_plot = ggplot(data = cv_all, aes(x = BSPI, y = sum.cv, shape = Species))+
+  geom_point(mapping = aes(x = BSPI, y = sum.cv, colour = Species), alpha = 0.70, size = 4)+
+  scale_color_d3()+
+  theme_bw(base_size = 16) +
+  scale_y_continuous(name="Sum CV") +
+  scale_x_continuous(name = "BSPI")+
+  theme(axis.text.x = element_text(face="bold", colour="black", size=14),
+        axis.text.y = element_text(face="bold", colour="black", size=14),
+        axis.title.y = element_text(face="bold", colour="black", size=16),
+        axis.title.x = element_text(face="bold", colour="black", size=16),
+        axis.ticks = element_line(colour="black", size=1))+
+  theme(panel.grid=element_blank())+
+  guides(fill = guide_legend(title = "Species"))+
+  geom_smooth(data = cv_all, aes(x = BSPI, y = sum.cv, color = Species), method = lm, se = TRUE, linetype = "dashed", level = 0.95)
+sum_bspi_plot
+
+#Recreate same plot after removing outlier values
+cv_all2 = cv_comb[cv_comb$Site != "MDI4" & cv_comb$Site != "DDM2" & cv_comb$Site != "LGI2",]
+cv_all2$Site = as.factor(cv_all2$Site)
+cv_all2$Species = NA
+cv_all2$Species = "Site-level"
+cv_all2$sum.cv = cv_all2$SiteCV
+cv_all2 = rbind(cv_all2[, c(2,5,23,24)], cv_bspi[, c(1,4,24,22)])
+cv_all2 = cv_all2[cv_all2$Site != "MDI4" & cv_all2$Site != "DDM2" & cv_all2$Site != "LGI2",]
+cv_all2$Species = as.factor(cv_all2$Species)
+#create scatterplot of bspi vs sum.cv with different colours for each species
+sum_bspi_plot2 = ggplot(data = cv_all2, aes(x = BSPI, y = sum.cv, shape = Species))+
+  geom_point(mapping = aes(x = BSPI, y = sum.cv, colour = Species), alpha = 0.70, size = 4)+
+  scale_color_d3()+
+  theme_bw(base_size = 16) +
+  scale_y_continuous(name="Sum CV") +
+  scale_x_continuous(name = "BSPI")+
+  theme(axis.text.x = element_text(face="bold", colour="black", size=14),
+        axis.text.y = element_text(face="bold", colour="black", size=14),
+        axis.title.y = element_text(face="bold", colour="black", size=16),
+        axis.title.x = element_text(face="bold", colour="black", size=16),
+        axis.ticks = element_line(colour="black", size=1))+
+  theme(panel.grid=element_blank())+
+  guides(fill = guide_legend(title = element_blank()))+
+  geom_smooth(data = cv_all2, aes(x = BSPI, y = sum.cv, color = Species), method = lm, se = TRUE, linetype = "dashed", level = 0.95)
+sum_bspi_plot2
+
+#look at summary statistics
+summary(lm(BSPI~SiteCV, cv_comb[cv_comb$Site != "MDI4" & cv_comb$Site != "DDM2" & cv_comb$Site != "LGI2",]))
+summary(lm(BSPI~sum.cv, cv_all2[cv_all2$Species == "V. uliginosum",]))
+summary(lm(BSPI~sum.cv, cv_all2[cv_all2$Species == "Site-level",]))
+summary(lm(BSPI~sum.cv, cv_all2[cv_all2$Species == "H. splendens",]))
+
+################################################
+#3: REGRESS CV COMB WITH ENVIRONMENTAL VARIABLES
+################################################
+
+summary(lm(SiteCV ~ log(TimeSinceFire), cv_comb))
+summary(lm(SiteCV ~ Moisture_Class, cv_comb))
+summary(aov(SiteCV ~ Wetness, cv_comb))
+summary(lm(SiteCV ~ Age_Class, cv_comb))
+summary(lm(SiteCV ~ Avg_activelayer, cv_comb))
+summary(lm(SiteCV ~ Elevation, cv_comb))
+summary(lm(SiteCV ~ Soil_pH, cv_comb))
+summary(aov(SiteCV ~ Topo_Position, cv_comb))
+summary(aov(SiteCV ~ Surficial_Geology, cv_comb))
+summary(aov(SiteCV ~ Ecoregion, cv_comb)) #groups are significantly different
+
+#Plot Site Cv vs Ecoregion
+ggplot(data = cv_comb, aes(x = Ecoregion, y = SiteCV, color = Ecoregion))+
+  geom_boxplot(lwd = 1.25)+
+  scale_color_d3()+
+  theme_bw(base_size = 16) +
+  scale_y_continuous(name= "Site-Level CV") +
+  scale_x_discrete(name = "Ecoregion")+
+  theme(axis.text.x = element_text(face="bold", colour="black", size=14, angle = 20, hjust = 1),
+        axis.text.y = element_text(face="bold", colour="black", size=14),
+        axis.title = element_text(face = "bold", colour = "black", size = 20),
+        axis.ticks = element_line(colour="black", size=1))+
+  theme(panel.grid=element_blank())+
+  theme(strip.text = element_text(face = "bold", colour = "black", size = 13))+
+  theme(legend.position = "none")
+
+
+############################################################################
+#4: CONDUCT REGRESSION TREE ANALYSIS ON CV COMB WITH ENVIRONMENTAL VARIABLES
+############################################################################
+#create data frame with only necessary data for reg tree
+cv_comb_2 = cv_comb[, c(2,1,8,11,12,13,18,19,20,14)]
+colnames(cv_comb_2) = c("Site", "SiteCV", "Elev", "ActLay", "SurfGeo", "Topo", "pH", "Age", "Moisture", "Ecoregion")
+
+#We know that there is a strong correlation between moisture and topo-position, do not include both of these variables at once in the analysis
+#set the model control parameters for H. splendens model (min bucket of 2, since n = 22)
+control1 = rpart.control(minbucket = 2, cp = 0.01)
+control2 = rpart.control(minbucket = 2, cp = 0.05)
+
+#create regression tree model
+cvregtree1 = rpart(SiteCV ~ Age+SurfGeo+Elev+Moisture+pH,
+                   method="anova", data=cv_comb_2,
+                   control = control2)
+cvregtree1
+
+#plot tree
+rpart.plot(cvregtree1, type = 3, digits = 2)
+cvtreeplot1 = prp(cvregtree1,
+                  type = 4, # left and right split labels (see Figure 2)
+                  clip.right.labs = FALSE, # full right split labels
+                  extra = 101, # show nbr of obs and percentages (see Figure 3)
+                  under = TRUE, # position extra info _under_ the boxes
+                  under.cex = 1, # size of text under the boxes (default is .8)
+                  fallen.leaves = TRUE, # put leaves at the bottom of plot
+                  box.palette = "GnYlRd", # color of the boxes
+                  #branch = .3, # branch lines with narrow shoulders and down slopes
+                  round = 0, # no rounding of node corners i.e. use rectangles
+                  leaf.round = 9, # round leaf nodes (for leaves, this supersedes the round arg)
+                  prefix = "CV ", # prepend this string to the node labels
+                  #main = "An Example", # main title
+                  cex.main = 1.5, # use big text for main title
+                  branch.col = "gray", # color of branch lines
+                  branch.lwd = 2) # line width of branch lines
+
+#display the model results
+printcp(cvregtree1) # display the results
+plotcp(cvregtree1) # visualize cross-validation results
+summary(cvregtree1) # detailed summary of splits
+
+#prune the tree
+cvregtree2 = prune(cvregtree1, cp = 0.131935)
+
+#plot the pruned tree
+cvtreeplot2 = prp(cvregtree2,
+                  type = 4, # left and right split labels (see Figure 2)
+                  clip.right.labs = FALSE, # full right split labels
+                  extra = 101, # show nbr of obs and percentages (see Figure 3)
+                  under = TRUE, # position extra info _under_ the boxes
+                  under.cex = 1, # size of text under the boxes (default is .8)
+                  fallen.leaves = TRUE, # put leaves at the bottom of plot
+                  box.palette = "GnYlRd", # color of the boxes
+                  #branch = .3, # branch lines with narrow shoulders and down slopes
+                  round = 0, # no rounding of node corners i.e. use rectangles
+                  leaf.round = 9, # round leaf nodes (for leaves, this supersedes the round arg)
+                  prefix = "CV ", # prepend this string to the node labels
+                  #main = "An Example", # main title
+                  cex.main = 1.5, # use big text for main title
+                  branch.col = "gray", # color of branch lines
+                  branch.lwd = 2) # line width of branch lines
+
+#display the model results
+printcp(cvregtree2) # display the results
+plotcp(cvregtree2) # visualize cross-validation results
+summary(cvregtree2) # detailed summary of splits
+
+#Create Variable importance plot
+Variable = (c("Age","Moisture","Soil pH", "Surficial Geology", "Elevation"))
+Importance = c(54,17,14,8,7)
+VarImp = data.frame(cbind(Variable, Importance))
+VarImp$Importance = as.numeric(as.character(VarImp$Importance))
+ggplot(data = VarImp, aes(x = Variable, y = Importance))+
+  geom_bar(stat = "identity") +
+  geom_text(aes(label=Importance), vjust=0.5, hjust = 1.5, size = 8,color = "white")+
+  coord_flip()+
+  scale_x_discrete(name = element_blank(),limits = c("Age","Moisture","Soil pH", "Surficial Geology", "Elevation"))+
+  scale_color_d3()+
+  theme_bw(base_size = 16) +
+  theme(axis.text.x = element_text(face="bold", colour="black", size=14),
+        axis.text.y = element_text(face="bold", colour="black", size=18),
+        axis.title.y = element_text(face="bold", colour="black", size=18),
+        axis.title.x = element_text(face="bold", colour="black", size=18),
+        axis.ticks = element_line(colour="black", size=1))+
+  theme(panel.grid=element_blank())
