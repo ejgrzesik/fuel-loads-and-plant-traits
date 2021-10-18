@@ -1,1 +1,207 @@
+library(tidyverse)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(reshape2)
+library(ggsci)
+
+#####################################################################
+#1: CREATE MULTI-FACETED X-Y PLOTS OF BSPI VS ENVIRONMENTAL VARIABLES
+#####################################################################
+
+#import data
+bspind = read.csv("BSPIndex_bysite.csv")
+  ##MDI4 site was removed because it is an outlier
+  ##GSM3's bspi an outlier, recalculated using mean organic soil fuel load from similar sites, i.e. bspind$BSPI[bspind$Site == "GSM3"] = bspi$FI[bspi$Site == "GSM3"] / mean(bspi$OSFuelLoad[bspi$Site %in% c("BCEFM2", "GSM1", "WCM3")])
+
+#create bspi x tsf dataframe, add in predicted values and confint
+bspi_tsf = bspind[,c(1,4,20)]
+colnames(bspi_tsf) = c("Site", "BSPI", "Variable")
+bspi_tsf$VarName = "Stand Age"
+fitTSF = lm(BSPI~TimeSinceFire, data = bspind)
+predsTSF = data.frame(predict(fitTSF, interval = "confidence"))
+bspi_tsf = cbind(bspi_tsf,predsTSF)
+
+#create bspi x wetness class dataframe, add in predicted values and confint
+bspind$Wetness_Class = NA ; bspind$Wetness_Class[bspind$Wetness == "Dry"] = 1 ; bspind$Wetness_Class[bspind$Wetness == "Moderate"] = 2 ; bspind$Wetness_Class[bspind$Wetness == "Wet"] = 3 ; bspind$Wetness_Class = as.integer(bspind$Wetness_Class)
+bspi_wc = bspind[,c(1,4,22)]
+colnames(bspi_wc) = c("Site", "BSPI", "Variable")
+bspi_wc$VarName = "Moisture"
+fitwc = lm(BSPI~Wetness_Class, data = bspind)
+predswc = data.frame(predict(fitwc, interval = "confidence"))
+bspi_wc = cbind(bspi_wc,predswc)
+
+#create bspi x elev dataframe, add in predicted values and confint
+bspi_elev = bspind[,c(1,4,9)]
+colnames(bspi_elev) = c("Site", "BSPI", "Variable")
+bspi_elev$VarName = "Elevation"
+fitelev = lm(BSPI~Elevation, data = bspind)
+predselev = data.frame(predict(fitelev, interval = "confidence"))
+bspi_elev = cbind(bspi_elev,predselev)
+
+#create bspi x topo dataframe, add in predicted values and confint
+bspi_topo = bspind[,c(1,4,14)]
+colnames(bspi_topo) = c("Site", "BSPI", "Variable")
+bspi_topo$VarName = "Topographic Postion"
+fittopo = lm(BSPI~Topo_Position, data = bspind)
+predstopo = data.frame(predict(fittopo, interval = "confidence"))
+bspi_topo = cbind(bspi_topo,predstopo)
+
+#create bspi x al dataframe, add in predicted values and confint
+bspi_al = bspind[,c(1,4,12)]
+colnames(bspi_al) = c("Site", "BSPI", "Variable")
+bspi_al$VarName = "Active Layer"
+fital = lm(BSPI~Avg_activelayer, data = bspind)
+predsal = data.frame(predict(fital, interval = "confidence"))
+bspi_al = cbind(bspi_al,predsal)
+
+#create bspi x sg dataframe, add in predicted values and confint
+bspi_sg = bspind[,c(1,4,13)]
+colnames(bspi_sg) = c("Site", "BSPI", "Variable")
+bspi_sg$VarName = "Surficial Geology"
+fitsg = lm(BSPI~Surficial_Geology, data = bspind)
+predssg = data.frame(predict(fitsg, interval = "confidence"))
+bspi_sg = cbind(bspi_sg,predssg)
+
+#create bspi x pH, add in predicted values and confint
+bspi_ph = bspind[,c(1,4,19)]
+colnames(bspi_ph) = c("Site", "BSPI", "Variable")
+bspi_ph$VarName = "Soil PH"
+fitph = lm(BSPI~Soil_pH, data = bspind)
+predsph = data.frame(predict(fitph, interval = "confidence"))
+bspi_ph = cbind(bspi_ph,predsph)
+
+#join all of the dataframes together
+bspi_var = rbind(bspi_tsf, bspi_wc, bspi_elev, bspi_topo,bspi_al, bspi_sg, bspi_ph)
+
+#create multi-panel figure using bspi_var
+bspivarplot = ggplot(data = bspi_var[bspi_var$VarName != "Surficial Geology",], aes(x = Variable, y = BSPI))+ 
+  geom_point(mapping = aes(x = Variable, y = BSPI), alpha = 0.70, size = 4,
+             position = "jitter")+
+  scale_color_d3()+
+  theme_bw(base_size = 16) +
+  scale_y_continuous(name="Burn Severity Potential Index") +
+  scale_x_continuous()+
+  theme(axis.text.x = element_text(face="bold", colour="black", size=14),
+        axis.text.y = element_text(face="bold", colour="black", size=14),
+        axis.title.y = element_text(face="bold", colour="black", size=20),
+        axis.title.x = element_blank(),
+        axis.ticks = element_line(colour="black", size=1))+
+  theme(panel.grid=element_blank())+
+  guides(fill = guide_legend(title = "Moisture"))+
+  facet_wrap(.~VarName, scales = "free")+
+  geom_line(inherit.aes = FALSE, aes(y = fit, x = Variable), size = 1, linetype = "dashed")+
+  geom_ribbon(inherit.aes = FALSE, aes(ymin = lwr, ymax = upr, x = Variable), alpha = .15)+
+  theme(legend.title = element_text(size = 20),
+       legend.text = element_text(size = 20))
+bspivarplot 
+
+#summary statistics for each plot
+summary(lm(BSPI~TimeSinceFire, data = bspind))
+summary(lm(BSPI~Moisture_Class, data = bspind))
+summary(lm(BSPI~Elevation, data = bspind))
+summary(lm(BSPI~Topo_Position, data = bspind))
+summary(lm(BSPI~Avg_activelayer, data = bspind))
+summary(lm(BSPI~Surficial_Geology, data = bspind))
+summary(lm(BSPI~Soil_pH, data = bspind))
+
+
+####################################################################################
+#2: CONDUCT REGRESSION TREE ANALYSIS ON BSPI WITH ENVIRONMENTAL VARIABLES
+####################################################################################
+
+library(rpart)
+library(rpart.plot)
+
+#Investigate correlations between environmental variables
+##Convert Ecoregion to integer for correlation matrix
+bspind$Ecoreg.numb = NA
+bspind$Ecoreg.numb[bspind$Ecoregion == "Ray Mountains"] = 1
+bspind$Ecoreg.numb[bspind$Ecoregion == "Tanana-Kuskokwim Lowlands"] = 2
+bspind$Ecoreg.numb[bspind$Ecoregion == "Yukon-Tanana Uplands"] = 3
+bspind$Ecoreg.numb = as.numeric(bspind$Ecoreg.numb)
+cor(bspind[ , c(9,11,12,13,14,19,20,23)]) #Moisture and topographic position are highly correlated
+
+#Edit the rpart function using rpart.control, following guidelines from Poor and Ullman 2010, Buja and Lee 2001, other studies with small smaple sizes used up to 10% 
+control3 = rpart.control(minbucket = 3, cp = 0.01)
+
+#rename the columns in bspind
+colnames(bspind)
+bspi2 = bspind[,c(1,4,9,21,13,14,15,20,19,12 )]
+colnames(bspi2) = c("Site", "BSPI", "Elev","Moisture", "SurfGeo", "Topo", "Ecoregion", "Age", "pH", "ActLay")
+
+#Conduct reg tree model with age, moisture, surfgeo, elev, and ph
+regtree3= rpart(BSPI ~ Age+Moisture +SurfGeo + Elev + pH,
+                method="anova", data=bspi2,
+                control = control3)
+rpart.plot(regtree3, extra = 1, type = 4, clip.right.labs = FALSE,
+           branch = .3, under = TRUE)
+
+#display the model results
+printcp(regtree3) # display the results
+plotcp(regtree3) # visualize cross-validation results
+summary(regtree3) # detailed summary of splits
+
+#Make final regtree plots
+treeplot1 = prp(regtree3,
+                type = 4, # left and right split labels (see Figure 2)
+                clip.right.labs = FALSE, # full right split labels
+                extra = 101, # show nbr of obs and percentages (see Figure 3)
+                under = TRUE, # position extra info _under_ the boxes
+                under.cex = 1, # size of text under the boxes (default is .8)
+                fallen.leaves = TRUE, # put leaves at the bottom of plot
+                box.palette = "GnYlRd", # color of the boxes
+                #branch = .3, # branch lines with narrow shoulders and down slopes
+                round = 0, # no rounding of node corners i.e. use rectangles
+                leaf.round = 9, # round leaf nodes (for leaves, this supersedes the round arg)
+                prefix = "BSPI ", # prepend this string to the node labels
+                #main = "An Example", # main title
+                cex.main = 1.5, # use big text for main title
+                branch.col = "gray", # color of branch lines
+                branch.lwd = 2) # line width of branch lines
+
+#Prune the tree to decrease the xerror
+ptree1 = prune(regtree3, cp = 0.08)
+
+#display the model results
+printcp(ptree1) # display the results
+plotcp(ptree1) # visualize cross-validation results
+summary(ptree1) # detailed summary of splits
+
+#plot the pruned tree
+treeplot2 = prp(ptree1,
+                type = 4, # left and right split labels (see Figure 2)
+                clip.right.labs = FALSE, # full right split labels
+                extra = 101, # show nbr of obs and percentages (see Figure 3)
+                under = TRUE, # position extra info _under_ the boxes
+                under.cex = 1, # size of text under the boxes (default is .8)
+                fallen.leaves = TRUE, # put leaves at the bottom of plot
+                box.palette = "GnYlRd", # color of the boxes
+                #branch = .3, # branch lines with narrow shoulders and down slopes
+                round = 0, # no rounding of node corners i.e. use rectangles
+                leaf.round = 9, # round leaf nodes (for leaves, this supersedes the round arg)
+                prefix = "BSPI ", # prepend this string to the node labels
+                #main = "An Example", # main title
+                cex.main = 1.5, # use big text for main title
+                branch.col = "gray", # color of branch lines
+                branch.lwd = 2) # line width of branch lines
+
+#plot the variables importance as bar graph
+Variable = (c("Moisture","Surficial Geology", "pH","Age","Elevation"))
+Importance = c(59,18,13,8,2)
+VarImp = data.frame(cbind(Variable, Importance))
+VarImp$Importance = as.numeric(as.character(VarImp$Importance))
+ggplot(data = VarImp, aes(x = Variable, y = Importance))+
+  geom_bar(stat = "identity") +
+  geom_text(aes(label=Importance), vjust=0.5, hjust = 1.5, size = 8,color = "white")+
+  coord_flip()+
+  scale_x_discrete(name = element_blank(),limits = c("Moisture","Surficial Geology", "pH","Age","Elevation"))+
+  scale_color_d3()+
+  theme_bw(base_size = 16) +
+  theme(axis.text.x = element_text(face="bold", colour="black", size=14),
+        axis.text.y = element_text(face="bold", colour="black", size=18),
+        axis.title.y = element_text(face="bold", colour="black", size=18),
+        axis.title.x = element_text(face="bold", colour="black", size=18),
+        axis.ticks = element_line(colour="black", size=1))+
+  theme(panel.grid=element_blank())
 
