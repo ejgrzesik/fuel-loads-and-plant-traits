@@ -75,6 +75,7 @@ fuelload = fuelload[is.na(fuelload$Layer) == FALSE,]
   #create layer column
   shru$Layer[shru$Species %in% c("BETNEO", "POPBAL", "POPTRE")] = "DecSeedling"
   shru$Layer[shru$Species %in% c( "LARLAR", "PICEASP", "PICGLA", "PICMAR")] = "EverSeedling"
+  shru$Site = as.factor(shru$Site) ; shru$Layer = as.factor(shru$Layer)
 
   #Sum decseedlings fuel load for each site
   dseed = data.frame(as.vector(tapply(shru$Biomass[shru$Layer == "DecSeedling"], shru$Site[shru$Layer == "DecSeedling"], FUN = sum, na.rm = TRUE)))
@@ -176,12 +177,14 @@ flam_bysite$FI = as.vector(tapply(flam_bytype$FI, flam_bytype$Site, sum))
 
 #Create primkey in os_fuelload dataframe
 os_fuelload$primkey = as.factor(paste(os_fuelload$Site, os_fuelload$Layer, sep = "."))
+os_fuelload$Site = as.factor(os_fuelload$Site)
 
 #Find the average fibric and mesic fuel load for each site
 os_siteavg = data.frame(as.vector(tapply(os_fuelload$FuelLoad.kg.m2, os_fuelload$primkey, mean, na.rm = TRUE)))
 colnames(os_siteavg) = "FuelLoad.kg.m2"
 os_siteavg$primkey = as.factor(levels(os_fuelload$primkey))
 os_siteavg = os_siteavg %>% separate(primkey, into = c("Site", "Layer"), sep = '\\.')
+os_siteavg$Site = as.factor(os_siteavg$Site)
 
 #Find the sum of fibric and mesic for each site
 os_sitesum = data.frame(as.vector(tapply(os_siteavg$FuelLoad.kg.m2, os_siteavg$Site, sum, na.rm = TRUE)))
