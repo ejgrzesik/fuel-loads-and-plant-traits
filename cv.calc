@@ -6,10 +6,6 @@ library(dplyr)
 library(reshape2)
 library(ggsci)
 
-options(show.signif.stars=FALSE)   
-library(jagsUI);library(rjags);library(coda);
-library(matrixStats); library(R2OpenBUGS)
-library(tidyr) ; library(dplyr); library(stringi)
 
 #####################################################################
 #1: CALCULATE H. SPLENDENS TRAIT CV FROM BIOMASS WEIGHTED TRAIT MEANS
@@ -144,6 +140,6 @@ vu_cv$LWtoDW.cv = as.vector(tapply(vu_trait$LWtoDW, vu_trait$Site, sd, na.rm = T
 vu_cv$LWtoLL.cv = as.vector(tapply(vu_trait$LWtoLL, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$LWtoLL, vu_trait$Site, mean,na.rm = TRUE)*100)
 vu_cv$NGtoLL.cv = as.vector(tapply(vu_trait$NGtoLL, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$NGtoLL, vu_trait$Site, mean,na.rm = TRUE)*100)
 vu_cv$NGtoDW.cv = as.vector(tapply(vu_trait$NGtoDW, vu_trait$Site, sd, na.rm = TRUE)/tapply(vu_trait$NGtoDW, vu_trait$Site, mean,na.rm = TRUE)*100)
-##****Creating six sites with NA values due to value of 0 for decid leaf biomass??***
-##Calculate sum of trait cv for each site
+
+#Calculate sum of trait cv for each site
 vu_cv$Sum.cv = rowSums(vu_cv[,2:13])
