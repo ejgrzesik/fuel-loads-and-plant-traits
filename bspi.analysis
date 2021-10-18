@@ -13,6 +13,8 @@ library(ggsci)
 bspind = read.csv("BSPIndex_bysite.csv")
 ##MDI4 site was removed because it is an outlier
 bspind = bspind[bspind$Site != "MDI4",]
+##bspi for GSM3 because organic soil fuel load is outlier, recalculate bspi using mean OS fuel load of similar sites
+bspind$BSPI[bspind$Site == "GSM3"] = bspi$FI[bspi$Site == "GSM3"] / mean(bspi$OSFuelLoad[bspi$Site %in% c("BCEFM2", "GSM1", "WCM3")])
 
 #create bspi x tsf dataframe, add in predicted values and confint
 bspi_tsf = bspind[,c(1,4,20)]
