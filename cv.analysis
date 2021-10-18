@@ -1,1 +1,60 @@
+library(tidyverse)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(reshape2)
+library(ggsci)
+
+
+##########################################################################################
+#1: PLOT SUM CV (H. SPLENDENS, V. ULIGINOSUM AND COMBINED) AND BSPI, DETERMINE CORRELATION
+##########################################################################################
+
+#Import data
+hs_cv = read.csv("Hspl_CV_bysite.csv", row.names = 1)
+vu_cv = read.csv("Vuli_Cv_bysite.csv", row.names = 1)
+bspi = read.csv("BSPIndex_bysite.csv", row.names = 1)
+str(bspi)
+bspi$Topo_Position = as.factor(bspi$Topo_Position) ; bspi$Surficial_Geology = as.factor(bspi$Surficial_Geology)
+
+#Merge trait cv and bspi dataframes together
+hs_bspi = bspi
+##remove rows without data for hs_cv (Should have 22 sites total)
+hs_bspi = hs_bspi[-c(3,4,5,8,9,11),]
+hs_bspi$sum.cv = NA
+hs_bspi$sum.cv = hs_cv$sum.cv  
+hs_bspi$mean.cv = hs_cv$mean.cv
+hs_bspi$Species = NA
+hs_bspi$Species = as.factor("H. splendens")
+vu_bspi = bspi
+  #remove rows without data for vu_cv
+vu_bspi = vu_bspi[-c(9,11,24),]
+vu_bspi$sum.cv = vu_cv$sum.cv
+vu_bspi$mean.cv = vu_cv$mean.cv
+vu_bspi$Species = NA
+vu_bspi$Species = as.factor("V. uliginosum")
+##Merge data frames
+cv_bspi = rbind(hs_bspi, vu_bspi)
+
+#create scatterplot of bspi vs sum.cv with different colours for each species
+sum_bspi_plot = ggplot(data = cv_bspi, aes(x = BSPI, y = sum.cv, shape = Species))+
+  geom_point(mapping = aes(x = BSPI, y = sum.cv, colour = Species), alpha = 0.70, size = 4)+
+  scale_color_d3()+
+  theme_bw(base_size = 16) +
+  scale_y_continuous(name="Sum CV") +
+  scale_x_continuous(name = "Burn Severity Potential Index")+
+  theme(axis.text.x = element_text(face="bold", colour="black", size=14),
+        axis.text.y = element_text(face="bold", colour="black", size=14),
+        axis.title.y = element_text(face="bold", colour="black", size=16),
+        axis.title.x = element_text(face="bold", colour="black", size=16),
+        axis.ticks = element_line(colour="black", size=1))+
+  theme(panel.grid=element_blank())+
+  guides(fill = guide_legend(title = "Species"))+
+  geom_smooth(data = cv_bspi, aes(x = BSPI, y = sum.cv, color = Species), method = lm, se = TRUE, linetype = "dashed", level = 0.95)
+sum_bspi_plot
+
+#look at summary statistics
+summary(lm(BSPI~sum.cv, cv_bspi[cv_bspi$Species == "H. splendens",]))
+summary(lm(BSPI~sum.cv, cv_bspi[cv_bspi$Species == "V. uliginosum",]))
+  #no significant relationship
 
