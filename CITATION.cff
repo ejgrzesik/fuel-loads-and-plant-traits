@@ -1,0 +1,15 @@
+# YAML 1.2
+---
+authors: 
+  -
+    affiliation: "University of Alaska Fairbanks"
+    family-names: Grzesik
+    given-names: "Emilia Janina"
+    orcid: "https://orcid.org/https://orcid.org/0000-0002-5083-5888"
+cff-version: "1.1.0"
+date-released: 2021-10-20
+doi: "10.5281/zenodo.5579866"
+message: "If you use this software, please cite it using these metadata."
+title: "Fuel Load and Plant Trait Software"
+version: "v1.0.0"
+...
