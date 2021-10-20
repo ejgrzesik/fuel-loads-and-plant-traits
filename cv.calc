@@ -105,6 +105,13 @@ decbiom$biomass = as.vector(tapply(fuelload$FuelLoad[fuelload$Layer == "Deciduou
 str(decbiom)
 ##remove sites without vac uli data (DCY3, DCY9, MDI4)
 decbiom = decbiom[-c(9,11,23),]
+##Fill in missing biomass values using average biomass of evergreen shrub from same site
+decbiom$biomass[decbiom$Site == "BFY10"] = mean(fuelload$FuelLoad[fuelload$Layer == "EvergreenLeaf" & fuelload$Site == "BFY10"])
+decbiom$biomass[decbiom$Site == "DDM2"] = mean(fuelload$FuelLoad[fuelload$Layer == "EvergreenLeaf" & fuelload$Site == "DDM2"])
+decbiom$biomass[decbiom$Site == "GSM3"] = mean(fuelload$FuelLoad[fuelload$Layer == "EvergreenLeaf" & fuelload$Site == "GSM3"])
+decbiom$biomass[decbiom$Site == "GSM5"] = mean(fuelload$FuelLoad[fuelload$Layer == "EvergreenLeaf" & fuelload$Site == "GSM5"])
+decbiom$biomass[decbiom$Site == "LGI2"] = mean(fuelload$FuelLoad[fuelload$Layer == "EvergreenLeaf" & fuelload$Site == "LGI2"])
+decbiom$biomass[decbiom$Site == "WCM2"] = mean(fuelload$FuelLoad[fuelload$Layer == "EvergreenLeaf" & fuelload$Site == "WCM2"])
 
 #Calculate biomass weighted traits
 ##Add shrub biomass to vu_trait
