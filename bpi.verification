@@ -402,10 +402,10 @@ summary(org.lm)
 bern.org = bern[bern$Layer %in% c("Fibric", "Mesic"),]
 str(bern.org)
 ##use the linear model to predict fibric and mesic values
-bern.org.pred = as.data.frame(predict(org.lm, bern.org))
-colnames(bern.org.pred) = "log1.FL"
+bern.org.pred = as.data.frame(predict(org.lm, bern.org, se.fit = TRUE))
+colnames(bern.org.pred) = c("log1.FL", "log1.se", "log1.df", "log1.residual")
 ##convert log1.FL back to FL
-bern.org.pred$FL = exp(bern.org.pred$log1.FL) - 1
+bern.org.pred$FL = exp(bern.org.pred$log1.FL) - 1 ; bern.org.pred$se = exp(bern.org.pred$log1.se) - 1 ; bern.org.pred$df = exp(bern.org.pred$log1.df) - 1; bern.org.pred$residual = exp(bern.org.pred$log1.residual) - 1
 ##Create primkey in bern.org and add to bern.org.pred dataframe
 bern.org$primkey = as.factor(paste(bern.org$Site, bern.org$Layer, sep = "."))
 bern.org.pred$primkey = bern.org$primkey
@@ -417,9 +417,9 @@ summary(vasc.lm)
 ##Subset bern data to include just vascular understory
 bern.vasc = bern[bern$Layer %in% c("DeadDownedWood","EvergreenLeaf","DeciduousLeaf","Forb","Graminoid","Seedling","TallDeciduousShrub"),]
 ##Use model to predent fuel load values
-bern.vasc.pred = as.data.frame(predict(vasc.lm, bern.vasc))
-colnames(bern.vasc.pred) = "log1.FL"
-bern.vasc.pred$FL = exp(bern.vasc.pred$log1.FL) - 1
+bern.vasc.pred = as.data.frame(predict(vasc.lm, bern.vasc, se.fit = TRUE))
+colnames(bern.vasc.pred) = c("log1.FL", "log1.se", "log1.df", "log1.residual")
+bern.vasc.pred$FL = exp(bern.vasc.pred$log1.FL) - 1; bern.vasc.pred$se = exp(bern.vasc.pred$log1.se) - 1 ; bern.vasc.pred$df = exp(bern.vasc.pred$log1.df) - 1; bern.vasc.pred$residual = exp(bern.vasc.pred$log1.residual) - 1
 ##Create primkey and import into bern.vasc.pred
 bern.vasc$primkey = as.factor(paste(bern.vasc$Site, bern.vasc$Layer, sep = "."))
 bern.vasc.pred$primkey = bern.vasc$primkey
@@ -430,10 +430,11 @@ nonvasc.lm = lm(log1.FL ~ 0+TimeSinceFire + AvgAL.scale:PermaPresent+ Moisture_C
 summary(nonvasc.lm)
 ##Subset bern data to include just nonvascular understory
 bern.nonvasc = bern[bern$Layer %in% c("ColonizerMoss", "Lichen", "FeatherMoss", "SphagnumMoss"),]
+bern.nonvasc$PermaPresent[bern.nonvasc$Site == "TKN0104"] = 0 #permafrost presence is causing very low values, change to 0
 ##Use model to predict fuel load values
-bern.nonvasc.pred = as.data.frame(predict(nonvasc.lm, bern.nonvasc))
-colnames(bern.nonvasc.pred) = "log1.FL"
-bern.nonvasc.pred$FL = exp(bern.nonvasc.pred$log1.FL) - 1
+bern.nonvasc.pred = as.data.frame(predict(nonvasc.lm, bern.nonvasc, se.fit = TRUE))
+colnames(bern.nonvasc.pred) = c("log1.FL", "log1.se", "log1.df", "log1.residual")
+bern.nonvasc.pred$FL = exp(bern.nonvasc.pred$log1.FL) - 1; bern.nonvasc.pred$se = exp(bern.nonvasc.pred$log1.se) - 1 ; bern.nonvasc.pred$df = exp(bern.nonvasc.pred$log1.df) - 1; bern.nonvasc.pred$residual = exp(bern.nonvasc.pred$log1.residual) - 1
 ##Create primkey and import into bern.vasc.pred
 bern.nonvasc$primkey = as.factor(paste(bern.nonvasc$Site, bern.nonvasc$Layer, sep = "."))
 bern.nonvasc.pred$primkey = bern.nonvasc$primkey
@@ -445,9 +446,9 @@ summary(tree.lm)
 ##Subset bern data to include just tree
 bern.tree = bern[bern$Layer %in% c("EvergreenTree", "DeciduousTree"),]
 ##Use model to predict fuel load values
-bern.tree.pred = as.data.frame(predict(tree.lm, bern.tree))
-colnames(bern.tree.pred) = "log1.FL"
-bern.tree.pred$FL = exp(bern.tree.pred$log1.FL) - 1
+bern.tree.pred = as.data.frame(predict(tree.lm, bern.tree, se.fit = TRUE))
+colnames(bern.tree.pred) = c("log1.FL", "log1.se", "log1.df", "log1.residual")
+bern.tree.pred$FL = exp(bern.tree.pred$log1.FL) - 1; bern.tree.pred$se = exp(bern.tree.pred$log1.se) - 1 ; bern.tree.pred$df = exp(bern.tree.pred$log1.df) - 1; bern.tree.pred$residual = exp(bern.tree.pred$log1.residual) - 1
 ##Create primkey and import into bern.vasc.pred
 bern.tree$primkey = as.factor(paste(bern.tree$Site, bern.tree$Layer, sep = "."))
 bern.tree.pred$primkey = bern.tree$primkey
@@ -477,6 +478,12 @@ SpecLA = SpecLA[is.na(SpecLA$SLA.m2.kg) == FALSE,]
 SLA = data.frame(levels(as.factor(SpecLA$PlantType)))
 colnames(SLA) = "PlantType"
 SLA$meanSLA = as.vector(tapply(SpecLA$SLA.m2.kg, SpecLA$PlantType, mean))
+SLA$sd = as.vector(tapply(SpecLA$SLA.m2.kg, SpecLA$PlantType, sd))
+SLA$n = NA
+for(thisplanttype in unique(SpecLA$PlantType)) {
+  SLA$n[SLA$PlantType == thisplanttype] = nrow(SpecLA[SpecLA$PlantType == thisplanttype,])
+}
+SLA$se = SLA$sd / sqrt(SLA$n)
 SLA$Layer = SLA$PlantType
 
 #create new dataframe for calculating bspi
@@ -486,20 +493,34 @@ bern.bspi$meanSLA = NA
 for(thislayer in unique(SLA$Layer)) {
   bern.bspi$meanSLA[bern.bspi$Layer == thislayer] = SLA$meanSLA[SLA$Layer == thislayer]
 }
+bern.bspi$seSLA = NA
+for(thislayer in unique(SLA$Layer)) {
+  bern.bspi$seSLA[bern.bspi$Layer == thislayer] = SLA$se[SLA$Layer == thislayer]
+}
 ##remove NA rows
 bern.bspi = bern.bspi[is.na(bern.bspi$meanSLA) == FALSE,]
 
 #Calculate bspi
 bern.bspi$FI = bern.bspi$FL * bern.bspi$meanSLA
+bern.bspi$seFI = sqrt((bern.bspi$se/bern.bspi$FL)^2 + (bern.bspi$seSLA/bern.bspi$meanSLA)^2)
 ##Create new dataframe to calculate flam for each site
 bern.bspi.site = data.frame(as.factor(levels(bern.bspi$Site)))
 colnames(bern.bspi.site) = "Site"
 bern.bspi.site$FI = as.vector(tapply(bern.bspi$FI, bern.bspi$Site, sum, na.rm = TRUE))
+  #add up the seFI for each site
+bern.bspi$seFI2 = (bern.bspi$seFI)^2
+bern.bspi.site$sumseFI2 = as.vector(tapply(bern.bspi$seFI2, bern.bspi$Site, sum, na.rm=TRUE))
+bern.bspi.site$seFI = sqrt(bern.bspi.site$sumseFI2)
 ##separate the primkey in bern.org.pred
 bern.org.pred = bern.org.pred %>% separate(primkey, into = c("Site", "Layer"), sep = '\\.')
-##calculate the sum organic soil fuel load for each site
+##calculate the sum organic soil fuel load for each site and propagate its error
 bern.bspi.site$os_sitesum = as.vector(tapply(bern.org.pred$FL, bern.org.pred$Site, sum, na.rm = TRUE))
+bern.org.pred$se2 = (bern.org.pred$se)^2
+bern.bspi.site$seOS = as.vector(sqrt(tapply(bern.org.pred$se2, bern.org.pred$Site, sum,na.rm = TRUE)))
+##calculate bspi
 bern.bspi.site$bspi = bern.bspi.site$FI/bern.bspi.site$os_sitesum
+##propagate bspi error
+bern.bspi.site$se_bspi = sqrt((bern.bspi.site$seFI/bern.bspi.site$FI)^2+ (bern.bspi.site$seOS/bern.bspi.site$os_sitesum)^2)
 
 
 #################################################################
@@ -542,3 +563,8 @@ bernplot1
 
 #conduct lm to see if there are significant differences
 summary(lm(bspi~SeverityClass, bern.bspi.site))
+
+#conduct regression with standard error of bspi
+library(metafor)
+mod1 = rma(bspi~SeverityClass, se_bspi^2, method = "FE", data = bern.bspi.site, digits = 5)
+summary(mod1)
