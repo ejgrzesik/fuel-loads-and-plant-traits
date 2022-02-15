@@ -115,6 +115,13 @@ summary(lm(BSPI~Soil_pH, data = bspind))
 library(rpart)
 library(rpart.plot)
 
+#import data
+bspind = read.csv("BSPIndex_bysite.csv", row.names = 1)
+##MDI4 site was removed because it is an outlier
+bspind = bspind[bspind$Site != "MDI4",]
+#create bspi x wetness class dataframe, add in predicted values and confint
+bspind$Wetness_Class = NA ; bspind$Wetness_Class[bspind$Wetness == "Dry"] = 1 ; bspind$Wetness_Class[bspind$Wetness == "Moderate"] = 2 ; bspind$Wetness_Class[bspind$Wetness == "Wet"] = 3 ; bspind$Wetness_Class = as.integer(bspind$Wetness_Class)
+
 #Investigate correlations between environmental variables
 ##Convert Ecoregion to integer for correlation matrix
 bspind$Ecoreg.numb = NA
